@@ -772,6 +772,7 @@ proc storeBlock(
             deadlineObj = deadlineObj,
             maxRetriesCount = getRetriesCount())
 
+        debugFuluComment "We don't know yet if there'd be new PayloadAttributes version in Fulu."
         template callForkChoiceUpdated: auto =
           case self.consensusManager.dag.cfg.consensusForkAtEpoch(
               newHead.get.blck.bid.slot.epoch)

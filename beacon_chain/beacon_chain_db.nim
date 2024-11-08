@@ -508,7 +508,7 @@ proc new*(T: type BeaconChainDB,
 
     # V1 - expected-to-be small rows get without rowid optimizations
     keyValues = kvStore db.openKvStore("key_values", true).expectDb()
-    blocks = [
+    blocks = if cfg.FULU_FORK_EPOCH != FAR_FUTURE_EPOCH: [
       kvStore db.openKvStore("blocks").expectDb(),
       kvStore db.openKvStore("altair_blocks").expectDb(),
       kvStore db.openKvStore("bellatrix_blocks").expectDb(),
@@ -517,16 +517,34 @@ proc new*(T: type BeaconChainDB,
       kvStore db.openKvStore("electra_blocks").expectDb(),
       kvStore db.openKvStore("fulu_blocks").expectDb()]
 
+      else: [
+      kvStore db.openKvStore("blocks").expectDb(),
+      kvStore db.openKvStore("altair_blocks").expectDb(),
+      kvStore db.openKvStore("bellatrix_blocks").expectDb(),
+      kvStore db.openKvStore("capella_blocks").expectDb(),
+      kvStore db.openKvStore("deneb_blocks").expectDb(),
+      kvStore db.openKvStore("electra_blocks").expectDb(),
+      kvStore db.openKvStore("").expectDb()]
+
     stateRoots = kvStore db.openKvStore("state_roots", true).expectDb()
 
-    statesNoVal = [
-      kvStore db.openKvStore("state_no_validators2").expectDb(),
-      kvStore db.openKvStore("altair_state_no_validators").expectDb(),
-      kvStore db.openKvStore("bellatrix_state_no_validators").expectDb(),
-      kvStore db.openKvStore("capella_state_no_validator_pubkeys").expectDb(),
-      kvStore db.openKvStore("deneb_state_no_validator_pubkeys").expectDb(),
-      kvStore db.openKvStore("electra_state_no_validator_pubkeys").expectDb(),
-      kvStore db.openKvStore("fulu_state_no_validator_pubkeys").expectDb()]
+    statesNoVal = if cfg.FULU_FORK_EPOCH != FAR_FUTURE_EPOCH: [
+        kvStore db.openKvStore("state_no_validators").expectDb(),
+        kvStore db.openKvStore("altair_state_no_validators").expectDb(),
+        kvStore db.openKvStore("bellatrix_state_no_validators").expectDb(),
+        kvStore db.openKvStore("capella_state_no_validator_pubkeys").expectDb(),
+        kvStore db.openKvStore("deneb_state_no_validator_pubkeys").expectDb(),
+        kvStore db.openKvStore("electra_state_no_validator_pubkeys").expectDb(),
+        kvStore db.openKvStore("fulu_state_no_validator_pubkeys").expectDb()]
+
+      else: [
+        kvStore db.openKvStore("state_no_validators").expectDb(),
+        kvStore db.openKvStore("altair_state_no_validators").expectDb(),
+        kvStore db.openKvStore("bellatrix_state_no_validators").expectDb(),
+        kvStore db.openKvStore("capella_state_no_validator_pubkeys").expectDb(),
+        kvStore db.openKvStore("deneb_state_no_validator_pubkeys").expectDb(),
+        kvStore db.openKvStore("electra_state_no_validator_pubkeys").expectDb(),
+        kvStore db.openKvStore("").expectDb()]
 
     stateDiffs = kvStore db.openKvStore("state_diffs").expectDb()
     summaries = kvStore db.openKvStore("beacon_block_summaries", true).expectDb()

@@ -727,6 +727,7 @@ template writeValue*(w: var JsonWriter,
 
 func parseProvenBlockProperty*(propertyPath: string): Result[ProvenProperty, string] =
   if propertyPath == ".execution_payload.fee_recipient":
+    debugFuluComment "We don't know yet if `GeneralizedIndex` will stay same in Fulu yet."
     ok ProvenProperty(
       path: propertyPath,
       capellaIndex: some GeneralizedIndex(401),
