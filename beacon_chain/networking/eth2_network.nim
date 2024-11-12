@@ -449,9 +449,39 @@ func getScore*(a: Peer): int =
   ## Returns current score value for peer ``peer``.
   a.score
 
-func updateScore*(peer: Peer, score: int) {.inline.} =
+proc updateScore*(peer: Peer, score: int) =
   ## Update peer's ``peer`` score with value ``score``.
   peer.score = peer.score + score
+  if score == PeerScoreLowLimit:
+    info "Peer will be kicked soon"
+  elif score == PeerScorePoorRequest:
+    info "Peer is not responding on time"
+  elif score == PeerScoreInvalidRequest:
+    info "Peer is sending malformed or nonsensical data"
+  elif score == PeerScoreNoStatus:
+    info "Peer did not our answer to our `status` request"
+  elif score == PeerScoreStaleStatus:
+    info "Peer's status answer did not progress with time"
+  elif score == PeerScoreUseless:
+    info "Peer's latest head is lower than ours"
+  elif score == PeerScoreGoodStatus:
+    info "Peer's `status` answer is fine"
+  elif score == PeerScoreNoValues:
+    info "Peer did not respond to a request in time"
+  elif score == PeerScoreGoodBatchValue:
+    info "Individual response of the peer's multi step response is fine"
+  elif score == PeerScoreGoodValues:
+    info "Peer's response to our request is fine"
+  elif score == PeerScoreBadValues:
+    info "Peer's response contains incorrect data"
+  elif score == PeerScoreBadResponse:
+    info "Peer's response was not in the given range request"
+  elif score == PeerScoreBadColumns:
+    info "Peer's column responses are invalid"
+  elif score == PeerScoreMissingValues:
+    info "Peer contains too much of missing data"
+  elif score == PeerScoreUnviableFork:
+    info "Peer is in Unviable Fork"
   if peer.score > PeerScoreHighLimit:
     peer.score = PeerScoreHighLimit
 

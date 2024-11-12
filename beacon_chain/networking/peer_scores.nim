@@ -36,10 +36,10 @@ const
   PeerScoreBadValues* = -1000
     ## Peer's response contains incorrect data.
   PeerScoreBadResponse* = -1000
+    ## Peer's response is not in requested range.
+  PeerScoreBadColumns* = -100000
     ## Peer's column responses are invalid
     ## Specifically a peerdas devnet setting
-  PeerScoreBadColumns* = -100000
-    ## Peer's response is not in requested range.
   PeerScoreMissingValues* = -25
     ## Peer response contains too much missing data - this can happen either
     ## because a long reorg happened or the peer is falsely trying to convince
