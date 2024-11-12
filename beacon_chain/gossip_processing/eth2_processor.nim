@@ -418,10 +418,6 @@ proc processDataColumnSidecar*(
         elif self.dataColumnQuarantine[].hasEnoughDataColumns(forkyBlck):
           let
             columns = self.dataColumnQuarantine[].gatherDataColumns(block_root)
-          self.blockProcessor[].enqueueBlock(
-            MsgSource.gossip, columnless,
-            Opt.none(BlobSidecars),
-            Opt.some(self.dataColumnQuarantine[].popDataColumns(block_root, forkyBlck)))
           if columns.len >= (NUMBER_OF_COLUMNS div 2) and 
               self.dataColumnQuarantine[].supernode:
             let
@@ -430,7 +426,10 @@ proc processDataColumnSidecar*(
             for rc in reconstructed_columns.get:
               if rc notin self.dataColumnQuarantine[].gatherDataColumns(block_root).mapIt(it[]):
                 self.dataColumnQuarantine[].put(newClone(rc))
-
+          self.blockProcessor[].enqueueBlock(
+            MsgSource.gossip, columnless,
+            Opt.none(BlobSidecars),
+            Opt.some(self.dataColumnQuarantine[].popDataColumns(block_root, forkyBlck)))
         else:
           discard self.quarantine[].addColumnless(
             self.dag.finalizedHead.slot, forkyBlck)
