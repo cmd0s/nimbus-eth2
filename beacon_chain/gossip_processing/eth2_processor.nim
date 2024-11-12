@@ -274,7 +274,7 @@ proc processSignedBeaconBlock*(
 
     let data_columns =
       when typeof(signedBlock).kind >= ConsensusFork.Deneb:
-        if self.dataColumnQuarantine[].hasEnoughDataColumns(signedBlock):
+        if self.dataColumnQuarantine[].hasMissingDataColumns(signedBlock):
           Opt.some(self.dataColumnQuarantine[].popDataColumns(signedBlock.root, signedBlock))
         else:
           discard self.quarantine[].addColumnless(self.dag.finalizedHead.slot,
@@ -393,10 +393,9 @@ proc processDataColumnSidecar*(
   debug "Data column validated, putting data column in quarantine"
   self.dataColumnQuarantine[].put(newClone(dataColumnSidecar))
 
-  if self.dataColumnQuarantine[].supernode == false:
-    self.dag.db.putDataColumnSidecar(dataColumnSidecar)
-    debug "Validated column belongs to custody, attempting to persist",
-      data_column = shortLog(dataColumnSidecar)
+  self.dag.db.putDataColumnSidecar(dataColumnSidecar)
+  debug "Validated column belongs to custody, attempting to persist",
+    data_column = shortLog(dataColumnSidecar)
 
   let block_root = hash_tree_root(block_header)
   if (let o = self.quarantine[].popColumnless(block_root); o.isSome):
