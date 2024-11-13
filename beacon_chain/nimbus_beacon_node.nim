@@ -413,9 +413,6 @@ proc initFullNode(
       withBlck(signedBlock):
         when consensusFork >= ConsensusFork.Deneb:
           if not dataColumnQuarantine[].checkForInitialDcSidecars(forkyBlck):
-            # We effectively check for whether there were blob transactions
-            # against this block or not, if we don't see all the blob kzg 
-            # commitments there were no blobs known.
             # We don't have all the data columns for this block, so we have
             # to put it in columnless quarantine.
             if not quarantine[].addColumnless(dag.finalizedHead.slot, forkyBlck):
@@ -427,6 +424,10 @@ proc initFullNode(
             await blockProcessor[].addBlock(MsgSource.gossip, signedBlock,
                                       Opt.none(BlobSidecars), Opt.some(data_columns),
                                       maybeFinalized = maybeFinalized)
+        else:
+          await blockProcessor[].addBlock(MsgSource.gossip, signedBlock,
+                                    Opt.none(BlobSidecars), Opt.none(DataColumnSidecars),
+                                    maybeFinalized = maybeFinalized)
 
     rmanBlockLoader = proc(
         blockRoot: Eth2Digest): Opt[ForkedTrustedSignedBeaconBlock] =
