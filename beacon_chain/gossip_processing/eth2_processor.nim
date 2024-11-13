@@ -401,18 +401,15 @@ proc processDataColumnSidecar*(
     let columnless = o.unsafeGet()
     withBlck(columnless):
       when consensusFork >= ConsensusFork.Deneb:   
-        if self.dataColumnQuarantine[].gatherDataColumns(block_root).len == 
-            max(SAMPLES_PER_SLOT, CUSTODY_REQUIREMENT) and
-            self.dataColumnQuarantine[].hasMissingDataColumns(forkyBlck):
-          if self.dataColumnQuarantine[].supernode == false:
-            let columns = 
-              self.dataColumnQuarantine[].gatherDataColumns(block_root).mapIt(it[])
-            for gdc in columns:
-              self.dataColumnQuarantine[].put(newClone(gdc))
-            self.blockProcessor[].enqueueBlock(
-              MsgSource.gossip, columnless,
-              Opt.none(BlobSidecars),
-              Opt.some(self.dataColumnQuarantine[].popDataColumns(block_root, forkyBlck)))
+        if self.dataColumnQuarantine[].supernode == false:
+          let columns = 
+            self.dataColumnQuarantine[].gatherDataColumns(block_root).mapIt(it[])
+          for gdc in columns:
+            self.dataColumnQuarantine[].put(newClone(gdc))
+          self.blockProcessor[].enqueueBlock(
+            MsgSource.gossip, columnless,
+            Opt.none(BlobSidecars),
+            Opt.some(self.dataColumnQuarantine[].popDataColumns(block_root, forkyBlck)))
         elif self.dataColumnQuarantine[].hasEnoughDataColumns(forkyBlck):
           # let
           #   columns = self.dataColumnQuarantine[].gatherDataColumns(block_root)
