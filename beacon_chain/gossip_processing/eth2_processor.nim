@@ -401,7 +401,8 @@ proc processDataColumnSidecar*(
     let columnless = o.unsafeGet()
     withBlck(columnless):
       when consensusFork >= ConsensusFork.Deneb:   
-        if self.dataColumnQuarantine[].supernode == false:
+        if self.dataColumnQuarantine[].supernode == false and
+            self.dataColumnQuarantine[].hasMissingDataColumns(forkyBlck):
           let columns = 
             self.dataColumnQuarantine[].gatherDataColumns(block_root).mapIt(it[])
           for gdc in columns:
