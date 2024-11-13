@@ -893,7 +893,7 @@ proc storeBlock(
           #   discard self.consensusManager.quarantine[].addBlobless(
           #     dag.finalizedHead.slot, forkyBlck)
 
-          if self.dataColumnQuarantine[].hasMissingDataColumns(forkyBlck):
+          if self.dataColumnQuarantine[].hasEnoughDataColumns(forkyBlck):
             let data_columns = self.dataColumnQuarantine[].popDataColumns(
               forkyBlck.root, forkyBlck)
             self[].enqueueBlock(MsgSource.gossip, quarantined, Opt.none(BlobSidecars), Opt.some(data_columns))
