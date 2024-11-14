@@ -476,8 +476,6 @@ proc updateScore*(peer: Peer, score: int) =
     info "Peer's response contains incorrect data"
   elif score == PeerScoreBadResponse:
     info "Peer's response was not in the given range request"
-  elif score == PeerScoreBadColumns:
-    info "Peer's column responses are invalid"
   elif score == PeerScoreMissingValues:
     info "Peer contains too much of missing data"
   elif score == PeerScoreUnviableFork:

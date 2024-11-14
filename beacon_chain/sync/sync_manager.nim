@@ -671,13 +671,13 @@ proc syncStep[A, B](man: SyncManager[A, B], index: int, peer: A)
           return
       let groupedDataColumns = groupDataColumns(req, blockData, dataColumnData)
       if groupedDataColumns.isErr():
-        peer.updateScore(PeerScoreNoValues)
+        peer.updateScore(PeerScoreBadResponse)
         man.queue.push(req)
         warn "Received data columns is inconsistent",
           data_columns_map = getShortMap(req, dataColumnData), request = req, msg=groupedDataColumns.error()
         return
       if (let checkRes = groupedDataColumns.get.checkDataColumns(); checkRes.isErr):
-        peer.updateScore(PeerScoreBadColumns)
+        peer.updateScore(PeerScoreBadResponse)
         man.queue.push(req)
         warn "Received data columns is invalid",
           data_columns_count = len(dataColumnData),
