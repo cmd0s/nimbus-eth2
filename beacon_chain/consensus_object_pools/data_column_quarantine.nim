@@ -86,25 +86,16 @@ func accumulateDataColumns*(quarantine: DataColumnQuarantine,
   indices
 
 func gatherDataColumns*(quarantine: DataColumnQuarantine,
-                       digest: Eth2Digest): 
-                       seq[ref DataColumnSidecar] =
-  var columns: seq[ref DataColumnSidecar]
-  let
-    localSubnetCount = 
-      if quarantine.supernode:
-        DATA_COLUMN_SIDECAR_SUBNET_COUNT.uint64
-      else:
-        CUSTODY_REQUIREMENT.uint64
-    localCustodyColumns =
-      get_custody_columns(quarantine.nodeid,
-                          max(SAMPLES_PER_SLOT.uint64,
-                              localSubnetCount))
-  for i in localCustodyColumns:
+                       blck: deneb.SignedBeaconBlock | 
+                       electra.SignedBeaconBlock): 
+                       seq[DataColumnSidecar] =
+  var columns: seq[DataColumnSidecar]
+  for i in 0..<NUMBER_OF_COLUMNS:
     let idx = ColumnIndex(i)
     if quarantine.data_columns.hasKey(
-        (digest, idx)):
-      let value = quarantine.data_columns.getOrDefault((digest, idx), default(ref DataColumnSidecar))
-      columns.add(value)
+        (blck.root, idx)):
+      let value = quarantine.data_columns.getOrDefault((blck.root, idx), default(ref DataColumnSidecar))
+      columns.add(value[])
   columns
 
 func popDataColumns*(
@@ -175,7 +166,7 @@ func hasEnoughDataColumns*(quarantine: DataColumnQuarantine,
                               localSubnetCount))
   if quarantine.supernode:
     let
-      collectedColumns = quarantine.gatherDataColumns(blck.root)
+      collectedColumns = quarantine.gatherDataColumns(blck)
     if collectedColumns.len >= (localCustodyColumns.len div 2):
       return true
   else:

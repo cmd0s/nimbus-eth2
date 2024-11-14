@@ -392,36 +392,37 @@ proc processDataColumnSidecar*(
 
   debug "Data column validated, putting data column in quarantine"
   self.dataColumnQuarantine[].put(newClone(dataColumnSidecar))
-  if self.dataColumnQuarantine[].supernode == false:
-    self.dag.db.putDataColumnSidecar(dataColumnSidecar)
-    debug "Validated column belongs to custody, attempting to persist",
-      data_column = shortLog(dataColumnSidecar)
+  debug "Validated column belongs to custody, attempting to persist",
+    data_column = shortLog(dataColumnSidecar)
+  self.dag.db.putDataColumnSidecar(dataColumnSidecar)
 
   let block_root = hash_tree_root(block_header)
   if (let o = self.quarantine[].popColumnless(block_root); o.isSome):
     let columnless = o.unsafeGet()
     withBlck(columnless):
       when consensusFork >= ConsensusFork.Deneb:   
-        if self.dataColumnQuarantine[].supernode == false and
+        if self.dataColumnQuarantine[].gatherDataColumns(forkyBlck).len == 
+            max(SAMPLES_PER_SLOT, CUSTODY_REQUIREMENT) and
             self.dataColumnQuarantine[].hasMissingDataColumns(forkyBlck):
-          let columns = 
-            self.dataColumnQuarantine[].gatherDataColumns(block_root).mapIt(it[])
-          for gdc in columns:
-            self.dataColumnQuarantine[].put(newClone(gdc))
-          self.blockProcessor[].enqueueBlock(
-            MsgSource.gossip, columnless,
-            Opt.none(BlobSidecars),
-            Opt.some(self.dataColumnQuarantine[].popDataColumns(block_root, forkyBlck)))
+          if self.dataColumnQuarantine[].supernode == false:
+            let columns = 
+              self.dataColumnQuarantine[].gatherDataColumns(forkyBlck)
+            for gdc in columns:
+              self.dataColumnQuarantine[].put(newClone(gdc))
+            self.blockProcessor[].enqueueBlock(
+              MsgSource.gossip, columnless,
+              Opt.none(BlobSidecars),
+              Opt.some(self.dataColumnQuarantine[].popDataColumns(block_root, forkyBlck)))
         elif self.dataColumnQuarantine[].hasEnoughDataColumns(forkyBlck):
           let
-            columns = self.dataColumnQuarantine[].gatherDataColumns(block_root)
+            columns = self.dataColumnQuarantine[].gatherDataColumns(forkyBlck)
           if columns.len >= (NUMBER_OF_COLUMNS div 2) and 
               self.dataColumnQuarantine[].supernode:
             let
               reconstructed_columns = 
-                self.processReconstructionFromGossip(forkyBlck, columns.mapIt(it[]))
+                self.processReconstructionFromGossip(forkyBlck, columns)
             for rc in reconstructed_columns.get:
-              if rc notin self.dataColumnQuarantine[].gatherDataColumns(block_root).mapIt(it[]):
+              if rc notin self.dataColumnQuarantine[].gatherDataColumns(forkyBlck):
                 self.dataColumnQuarantine[].put(newClone(rc))
           self.blockProcessor[].enqueueBlock(
             MsgSource.gossip, columnless,
