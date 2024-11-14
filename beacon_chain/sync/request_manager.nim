@@ -560,17 +560,17 @@ proc getMissingDataColumns(rman: RequestManager): seq[DataColumnIdentifier] =
             if id.index in local_custody and id notin fetches and 
                 len(forkyBlck.message.body.blob_kzg_commitments) != 0:
               fetches.add(id)
-  #       else:
-  #         # this is a programming error and it not should occur
-  #         warn "missing data column handler found columnless block with all data columns",
-  #            blk = columnless.root,
-  #            commitments=len(forkyBlck.message.body.blob_kzg_commitments)
-  #         ready.add(columnless.root)
+        else:
+          # this is a programming error and it not should occur
+          warn "missing data column handler found columnless block with all data columns",
+             blk = columnless.root,
+             commitments=len(forkyBlck.message.body.blob_kzg_commitments)
+          ready.add(columnless.root)
   
-  # for root in ready:
-  #   let columnless = rman.quarantine[].popColumnless(root).valueOr:
-  #     continue
-  #   discard rman.blockVerifier(columnless, false)
+  for root in ready:
+    let columnless = rman.quarantine[].popColumnless(root).valueOr:
+      continue
+    discard rman.blockVerifier(columnless, false)
   fetches
 
 proc requestManagerDataColumnLoop(
