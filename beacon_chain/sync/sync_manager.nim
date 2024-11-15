@@ -347,7 +347,7 @@ proc reconstructWhileColumnSync*(blck: deneb.SignedBeaconBlock |
                                  columns: seq[ref DataColumnSidecar]):
                                  seq[ref DataColumnSidecar] = 
   let
-    recovered_cps = recover_cells_and_proofs(columns.mapIt(it[]), blck)
+    recovered_cps = recover_cells_and_proofs(columns.mapIt(it[]))
     recovered_cols = get_data_column_sidecars(blck, recovered_cps.get)
     refSeq = recovered_cols.mapIt(newClone it)
 
@@ -387,7 +387,7 @@ proc groupDataColumns*[T](req: SyncRequest[T],
           continue
         if grouped[block_idx].len >= (NUMBER_OF_COLUMNS div 2):
           let
-            recovered_cps = recover_cells_and_proofs(grouped[block_idx].mapIt(it[]), forkyBlck)
+            recovered_cps = recover_cells_and_proofs(grouped[block_idx].mapIt(it[]))
             recovered_cols = get_data_column_sidecars(forkyBlck, recovered_cps.get)
             refSeq = recovered_cols.mapIt(newClone it)
           groupedAndReconstructed[block_idx].add(refSeq)

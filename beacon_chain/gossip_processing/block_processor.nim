@@ -237,7 +237,7 @@ proc storeBackfillBlock(
         let
           data_columns = dataColumnsOpt.get
           recovered_cps = 
-            recover_cells_and_proofs(data_columns.mapIt(it[]), signedBlock)
+            recover_cells_and_proofs(data_columns.mapIt(it[]))
           recovered_cols = signedBlock.get_data_column_sidecars(recovered_cps.get)
 
         for mc in malformed_cols:
