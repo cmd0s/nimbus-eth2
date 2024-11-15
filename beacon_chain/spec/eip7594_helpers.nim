@@ -9,6 +9,8 @@
 
 # Uncategorized helper functions from the spec
 import
+  chronos,
+  results,
   std/[algorithm, macros, tables],
   stew/results,
   ssz_serialization/[
@@ -170,7 +172,6 @@ proc recover_matrix*(partial_matrix: seq[MatrixEntry],
 
   ok(extended_matrix)
 
-# THIS METHOD IS DEPRECATED, WILL BE REMOVED ONCE ALPHA 4 IS RELEASED
 proc recover_cells_and_proofs*(
     data_columns: seq[DataColumnSidecar],
     blck: deneb.SignedBeaconBlock |
@@ -180,45 +181,45 @@ proc recover_cells_and_proofs*(
     ForkedTrustedSignedBeaconBlock):
     Result[seq[CellsAndProofs], cstring] =
 
-  # This helper recovers blobs from the data column sidecars
-  if not (data_columns.len != 0):
+  if data_columns.len == 0:
     return err("DataColumnSidecar: Length should not be 0")
 
-  var columnCount = data_columns.len
-  var blobCount = data_columns[0].column.len
+  let columnCount = data_columns.len
+  let blobCount = data_columns[0].column.len
   for data_column in data_columns:
-    if not (blobCount == data_column.column.len):
-      return err ("DataColumns do not have the same length")
+    if blobCount != data_column.column.len:
+      return err("DataColumns do not have the same length")
 
-  var
-    recovered_cps = newSeq[CellsAndProofs](blobCount)
+  var recovered_cps = newSeq[Future[Result[CellsAndProofs, cstring]]](blobCount)
 
   for blobIdx in 0..<blobCount:
-    var
-      bIdx = blobIdx
-      cell_ids = newSeqOfCap[CellID](columnCount)
-      ckzgCells = newSeqOfCap[KzgCell](columnCount)
+    recovered_cps.add asyncSpawn:
+      var
+        cell_ids = newSeqOfCap[CellID](columnCount)
+        ckzgCells = newSeqOfCap[KzgCell](columnCount)
 
-    cell_ids.setLen(0)
-    ckzgCells.setLen(0)
+      for col in data_columns:
+        cell_ids.add col.index
 
-    for col in data_columns:
-      cell_ids.add col.index
+        let column = col.column
+        let cell = column[blobIdx]
+        ckzgCells.add cell
 
-      let 
-        column = col.column
-        cell = column[bIdx]
-      
-      ckzgCells.add cell
+      let recovered_cells_and_proofs = recoverCellsAndKzgProofs(cell_ids, ckzgCells)
+      if not recovered_cells_and_proofs.isOk:
+        return err("Issue with computing cells and proofs!")
 
-    # Recovering the cells and proofs
-    let recovered_cells_and_proofs = recoverCellsAndKzgProofs(cell_ids, ckzgCells)
-    if not recovered_cells_and_proofs.isOk:
-      return err("Issue with computing cells and proofs!")
+      ok(recovered_cells_and_proofs.get)
 
-    recovered_cps[bIdx] = recovered_cells_and_proofs.get
+  # Wait for all tasks to complete
+  for future in recovered_cps:
+    let result = waitFor future
+    if not result.isOk:
+      return err(result.error)
 
-  ok(recovered_cps)
+  # Collect results
+  let results = await recovered_cps.mapIt(it.result.get)
+  ok(results)
 
 proc compute_signed_block_header(signed_block: deneb.TrustedSignedBeaconBlock |
                                  electra.TrustedSignedBeaconBlock): 
