@@ -1552,7 +1552,7 @@ proc tryReconstructingDataColumns* (self: BeaconNode,
   # are already stored then we do not need to reconstruct at all
   if not storedColumns.len < NUMBER_OF_COLUMNS div 2 and storedColumns.len != NUMBER_OF_COLUMNS:
     # Recover blobs from saved data column sidecars
-    let recovered_cps = recover_cells_and_proofs(data_column_sidecars)
+    let recovered_cps = parallelColumnReconstruction(data_column_sidecars)
     if not recovered_cps.isOk:
       return err("Error recovering cells and proofs from data columns")
     # Reconstruct data column sidecars from recovered blobs

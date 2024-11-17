@@ -359,7 +359,7 @@ proc processReconstructionFromGossip*(self: var Eth2Processor,
                                       columns: seq[DataColumnSidecar]):
                                       Result[seq[DataColumnSidecar], cstring] =
   let
-    recovered_cps = recover_cells_and_proofs(columns)
+    recovered_cps = parallelColumnReconstruction(columns)
     recovered_columns = get_data_column_sidecars(signed_block, recovered_cps.get)
   
   ok(recovered_columns)
