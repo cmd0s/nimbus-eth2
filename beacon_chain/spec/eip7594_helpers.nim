@@ -10,6 +10,7 @@
 # Uncategorized helper functions from the spec
 import
   taskpools,
+  chronos,
   std/[algorithm, macros, tables, cpuinfo],
   stew/results,
   ssz_serialization/[
@@ -195,6 +196,7 @@ proc recover_cells_and_proofs_parallel*(
     data_columns: seq[DataColumnSidecar]):
     Result[seq[CellsAndProofs], cstring] =
 
+  let start = Moment.now()
   # This helper recovers blobs from the data column sidecars
   if not (data_columns.len != 0):
     return err("DataColumnSidecar: Length should not be 0")
@@ -220,6 +222,8 @@ proc recover_cells_and_proofs_parallel*(
     if res.isOk:
       recovered_cps.add(result.get)
 
+  let finish = Moment.now()
+  debug "Time taken to reconstruct in parallel", time = finish - start
   ok(recovered_cps)
 
 proc parallelColumnReconstruction*(
