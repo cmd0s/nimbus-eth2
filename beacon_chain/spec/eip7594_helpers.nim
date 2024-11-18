@@ -195,15 +195,15 @@ proc recover_cells_and_proofs_parallel*(
     data_columns: seq[DataColumnSidecar]):
     Result[seq[CellsAndProofs], cstring] =
 
-  # Validate data_columns
-  if data_columns.len == 0:
+  # This helper recovers blobs from the data column sidecars
+  if not (data_columns.len != 0):
     return err("DataColumnSidecar: Length should not be 0")
 
   let columnCount = data_columns.len
   let blobCount = data_columns[0].column.len
   for data_column in data_columns:
-    if blobCount != data_column.column.len:
-      return err("DataColumns do not have the same length")
+    if not (blobCount == data_column.column.len):
+      return err ("DataColumns do not have the same length")
 
   var
     pendingFuts = newSeq[Flowvar[Result[CellsAndProofs, cstring]]](blobCount)
