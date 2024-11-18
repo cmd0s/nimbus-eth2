@@ -1552,21 +1552,22 @@ proc tryReconstructingDataColumns* (self: BeaconNode,
   # are already stored then we do not need to reconstruct at all
   if not storedColumns.len < NUMBER_OF_COLUMNS div 2 and storedColumns.len != NUMBER_OF_COLUMNS:
     # Recover blobs from saved data column sidecars
-    let recovered_cps = parallelColumnReconstruction(data_column_sidecars)
-    if not recovered_cps.isOk:
-      return err("Error recovering cells and proofs from data columns")
-    # Reconstruct data column sidecars from recovered blobs
-    let reconstructedDataColumns = get_data_column_sidecars(signed_block, recovered_cps.get)
-    debugEcho "Reconstructed Data Columns len"
-    debugEcho reconstructedDataColumns.len
-    for data_column in reconstructedDataColumns:
-      if data_column.index notin custodiedColumnIndices:
-        continue
-      finalisedDataColumns.add(data_column)
-    for fc in finalisedDataColumns:
-      db.putDataColumnSidecar(fc)
-      debug "Reconstructed data column written to database",
-        data_column = shortLog(fc)
+    if data_column_sidecars.len > 0:
+      let recovered_cps = parallelColumnReconstruction(data_column_sidecars)
+      if not recovered_cps.isOk:
+        return err("Error recovering cells and proofs from data columns")
+      # Reconstruct data column sidecars from recovered blobs
+      let reconstructedDataColumns = get_data_column_sidecars(signed_block, recovered_cps.get)
+      debugEcho "Reconstructed Data Columns len"
+      debugEcho reconstructedDataColumns.len
+      for data_column in reconstructedDataColumns:
+        if data_column.index notin custodiedColumnIndices:
+          continue
+        finalisedDataColumns.add(data_column)
+      for fc in finalisedDataColumns:
+        db.putDataColumnSidecar(fc)
+        debug "Reconstructed data column written to database",
+          data_column = shortLog(fc)
   ok(finalisedDataColumns)
 
 proc reconstructAndSendDataColumns*(node: BeaconNode) {.async.} =
