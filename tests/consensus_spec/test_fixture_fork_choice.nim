@@ -79,10 +79,6 @@ proc initialLoad(
       path/"anchor_state.ssz_snappy",
       StateType.kind)
 
-    blck = parseTest(
-      path/"anchor_block.ssz_snappy",
-      SSZ, BlockType)
-
   ChainDAGRef.preInit(db, forkedState[])
 
   let
@@ -197,7 +193,8 @@ proc stepOnBlock(
     state,
     dag.getBlockIdAtSlot(time.slotOrZero).expect("block exists"),
     save = false,
-    stateCache
+    stateCache,
+    dag.updateFlags
   )
 
   # 3. Add block to DAG

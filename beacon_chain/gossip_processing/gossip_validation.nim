@@ -304,7 +304,8 @@ template validateBeaconBlockBellatrix(
       bellatrix.SignedBeaconBlock |
       capella.SignedBeaconBlock |
       deneb.SignedBeaconBlock |
-      electra.SignedBeaconBlock,
+      electra.SignedBeaconBlock |
+      fulu.SignedBeaconBlock,
     parent: BlockRef): untyped =
   # If the execution is enabled for the block -- i.e.
   # is_execution_enabled(state, block.body) then validate the following:

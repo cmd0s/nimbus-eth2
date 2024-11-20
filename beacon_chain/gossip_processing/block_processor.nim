@@ -107,7 +107,7 @@ type
       ## The slot at which we sent a payload to the execution client the last
       ## time
 
-  NewPayloadStatus {.pure.} = enum
+  NewPayloadStatus* {.pure.} = enum
     valid
     notValid
     invalid
@@ -123,7 +123,7 @@ type
 proc new*(T: type BlockProcessor,
           dumpEnabled: bool,
           dumpDirInvalid, dumpDirIncoming: string,
-          rng: ref HmacDrbgContext, taskpool: TaskPoolPtr,
+          batchVerifier: ref BatchVerifier,
           consensusManager: ref ConsensusManager,
           validatorMonitor: ref ValidatorMonitor,
           blobQuarantine: ref BlobQuarantine,
@@ -137,7 +137,7 @@ proc new*(T: type BlockProcessor,
     validatorMonitor: validatorMonitor,
     blobQuarantine: blobQuarantine,
     getBeaconTime: getBeaconTime,
-    verifier: BatchVerifier.init(rng, taskpool)
+    verifier: batchVerifier[]
   )
 
 # Sync callbacks
@@ -333,7 +333,8 @@ proc newExecutionPayload*(
 proc getExecutionValidity(
     elManager: ELManager,
     blck: bellatrix.SignedBeaconBlock | capella.SignedBeaconBlock |
-          deneb.SignedBeaconBlock | electra.SignedBeaconBlock,
+          deneb.SignedBeaconBlock | electra.SignedBeaconBlock |
+          fulu.SignedBeaconBlock,
     deadlineObj: DeadlineObject,
     maxRetriesCount: int
 ): Future[NewPayloadStatus] {.async: (raises: [CancelledError]).} =
@@ -371,7 +372,8 @@ proc getExecutionValidity(
 
 proc checkBloblessSignature(
     self: BlockProcessor,
-    signed_beacon_block: deneb.SignedBeaconBlock | electra.SignedBeaconBlock):
+    signed_beacon_block: deneb.SignedBeaconBlock | electra.SignedBeaconBlock |
+                         fulu.SignedBeaconBlock):
     Result[void, cstring] =
   let dag = self.consensusManager.dag
   let parent = dag.getBlockRef(signed_beacon_block.message.parent_root).valueOr:
@@ -415,6 +417,22 @@ proc enqueueBlock*(
       src: src))
   except AsyncQueueFullError:
     raiseAssert "unbounded queue"
+
+proc updateHead*(
+    consensusManager: ref ConsensusManager,
+    getBeaconTimeFn: GetBeaconTimeFn,
+): Result[void, string] =
+  let
+    attestationPool = consensusManager.attestationPool
+    wallTime = getBeaconTimeFn()
+    wallSlot = wallTime.slotOrZero()
+    newHead =
+      attestationPool[].selectOptimisticHead(wallSlot.start_beacon_time)
+  if newHead.isOk():
+    consensusManager[].updateHead(newHead.get.blck)
+    ok()
+  else:
+    err("Head selection failed, using previous head")
 
 proc storeBlock(
     self: ref BlockProcessor, src: MsgSource, wallTime: BeaconTime,
@@ -754,10 +772,11 @@ proc storeBlock(
             deadlineObj = deadlineObj,
             maxRetriesCount = getRetriesCount())
 
+        debugFuluComment "We don't know yet if there'd be new PayloadAttributes version in Fulu."
         template callForkChoiceUpdated: auto =
           case self.consensusManager.dag.cfg.consensusForkAtEpoch(
               newHead.get.blck.bid.slot.epoch)
-          of ConsensusFork.Deneb, ConsensusFork.Electra:
+          of ConsensusFork.Deneb, ConsensusFork.Electra, ConsensusFork.Fulu:
             # https://github.com/ethereum/execution-apis/blob/90a46e9137c89d58e818e62fa33a0347bba50085/src/engine/prague.md
             # does not define any new forkchoiceUpdated, so reuse V3 from Dencun
             callExpectValidFCU(payloadAttributeType = PayloadAttributesV3)

@@ -45,7 +45,6 @@ type
   SignatureBytes = DynamicBytes[96, 96]
   Int64LeBytes = DynamicBytes[8, 8]
   WithoutTimeout* = distinct int
-  Address = web3.Address
 
   DeadlineObject* = object
     # TODO (cheatfate): This object declaration could be removed when
@@ -130,7 +129,7 @@ type
 
     depositContractAddress*: Eth1Address
     depositContractBlockNumber: uint64
-    depositContractBlockHash: BlockHash
+    depositContractBlockHash: Hash32
 
     blocksPerLogsRequest: uint64
       ## This value is used to dynamically adjust the number of
@@ -199,7 +198,7 @@ type
 
   FullBlockId* = object
     number: Eth1BlockNumber
-    hash: BlockHash
+    hash: Hash32
 
   DataProviderFailure* = object of CatchableError
   CorruptDataProvider* = object of DataProviderFailure
@@ -458,7 +457,7 @@ proc connectedRpcClient(connection: ELConnection): Future[RpcClient] {.
 
 proc getBlockByHash(
     rpcClient: RpcClient,
-    hash: BlockHash
+    hash: Hash32
 ): Future[BlockObject] {.async: (raises: [CatchableError]).} =
   await rpcClient.eth_getBlockByHash(hash, false)
 
@@ -598,6 +597,9 @@ template EngineApiResponseType*(T: type deneb.ExecutionPayloadForSigning): type 
 template EngineApiResponseType*(T: type electra.ExecutionPayloadForSigning): type =
   engine_api.GetPayloadV4Response
 
+template EngineApiResponseType*(T: type fulu.ExecutionPayloadForSigning): type =
+  engine_api.GetPayloadV4Response
+
 template toEngineWithdrawals*(withdrawals: seq[capella.Withdrawal]): seq[WithdrawalV1] =
   mapIt(withdrawals, toEngineWithdrawal(it))
 
@@ -720,8 +722,12 @@ proc getPayload*(
       requests.filterIt(not(it.finished())).mapIt(it.cancelAndWait())
     await noCancel allFutures(pending)
 
-    if bestPayloadIdx.isSome():
-      return ok(requests[bestPayloadIdx.get()].value().asConsensusType)
+    when PayloadType.kind == ConsensusFork.Fulu:
+      if bestPayloadIdx.isSome():
+        return ok(requests[bestPayloadIdx.get()].value().asConsensusTypeFulu)
+    else:
+      if bestPayloadIdx.isSome():
+        return ok(requests[bestPayloadIdx.get()].value().asConsensusType)
 
     if timeoutExceeded:
       break
@@ -730,7 +736,7 @@ proc getPayload*(
 
 proc waitELToSyncDeposits(
     connection: ELConnection,
-    minimalRequiredBlock: BlockHash
+    minimalRequiredBlock: Hash32
 ) {.async: (raises: [CancelledError]).} =
   var rpcClient: RpcClient = nil
 
@@ -776,7 +782,7 @@ proc waitELToSyncDeposits(
 func networkHasDepositContract(m: ELManager): bool =
   not m.cfg.DEPOSIT_CONTRACT_ADDRESS.isDefaultValue
 
-func mostRecentKnownBlock(m: ELManager): BlockHash =
+func mostRecentKnownBlock(m: ELManager): Hash32 =
   if m.eth1Chain.finalizedDepositsMerkleizer.getChunkCount() > 0:
     m.eth1Chain.finalizedBlockHash.asBlockHash
   else:
@@ -987,7 +993,7 @@ proc sendNewPayload*(
       let
         requests = m.elConnections.mapIt:
           let req =
-            when typeof(blck).kind == ConsensusFork.Electra:
+            when typeof(blck).kind >= ConsensusFork.Electra:
               # https://github.com/ethereum/execution-apis/blob/4140e528360fea53c34a766d86a000c6c039100e/src/engine/prague.md#engine_newpayloadv4
               let versioned_hashes = mapIt(
                 blck.body.blob_kzg_commitments,
@@ -1111,7 +1117,7 @@ proc forkchoiceUpdated*(
                        Opt[PayloadAttributesV3],
     deadlineObj: DeadlineObject,
     maxRetriesCount: int
-): Future[(PayloadExecutionStatus, Opt[BlockHash])] {.
+): Future[(PayloadExecutionStatus, Opt[Hash32])] {.
    async: (raises: [CancelledError]).} =
 
   doAssert not headBlockHash.isZero
@@ -1129,7 +1135,7 @@ proc forkchoiceUpdated*(
   # payload (`Hash32()` if none yet finalized)"
 
   if m.elConnections.len == 0:
-    return (PayloadExecutionStatus.syncing, Opt.none BlockHash)
+    return (PayloadExecutionStatus.syncing, Opt.none Hash32)
 
   when payloadAttributes is Opt[PayloadAttributesV3]:
     template payloadAttributesV3(): auto =
@@ -1238,7 +1244,7 @@ proc forkchoiceUpdated*(
             pendingRequests.filterIt(not(it.finished())).
               mapIt(it.cancelAndWait())
           await noCancel allFutures(pending)
-          return (PayloadExecutionStatus.invalid, Opt.none BlockHash)
+          return (PayloadExecutionStatus.invalid, Opt.none Hash32)
         elif responseProcessor.selectedResponse.isSome:
           # We spawn task which will wait for all other responses which are
           # still pending, after 30.seconds all pending requests will be
@@ -1253,14 +1259,14 @@ proc forkchoiceUpdated*(
             pendingRequests.filterIt(not(it.finished())).
               mapIt(it.cancelAndWait())
           await noCancel allFutures(pending)
-          return (PayloadExecutionStatus.syncing, Opt.none BlockHash)
+          return (PayloadExecutionStatus.syncing, Opt.none Hash32)
 
         if len(pendingRequests) == 0:
           # All requests failed, we will continue our attempts until deadline
           # is not finished.
           inc(retriesCount)
           if retriesCount == maxRetriesCount:
-            return (PayloadExecutionStatus.syncing, Opt.none BlockHash)
+            return (PayloadExecutionStatus.syncing, Opt.none Hash32)
 
           # To avoid continous spam of requests when EL node is offline we
           # going to sleep until next attempt.
@@ -1273,7 +1279,7 @@ proc forkchoiceUpdated*(
     payloadAttributes: Opt[PayloadAttributesV1] |
                        Opt[PayloadAttributesV2] |
                        Opt[PayloadAttributesV3]
-): Future[(PayloadExecutionStatus, Opt[BlockHash])] {.
+): Future[(PayloadExecutionStatus, Opt[Hash32])] {.
     async: (raises: [CancelledError], raw: true).} =
   forkchoiceUpdated(
     m, headBlockHash, safeBlockHash, finalizedBlockHash,
@@ -1389,7 +1395,7 @@ func depositEventsToBlocks(
     let
       logEvent = JrpcConv.decode(logEventData.string, LogObject)
       blockNumber = Eth1BlockNumber readJsonField(logEvent, blockNumber, Quantity)
-      blockHash = readJsonField(logEvent, blockHash, BlockHash)
+      blockHash = readJsonField(logEvent, blockHash, Hash32)
 
     if lastEth1Block == nil or lastEth1Block.number != blockNumber:
       lastEth1Block = Eth1Block(
