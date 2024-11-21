@@ -9,7 +9,7 @@
 
 import
   # Standard library
-  std/[strutils, typetraits],
+  std/[sequtils, strutils, typetraits],
   # Internals
   ./os_ops,
   ../../beacon_chain/spec/datatypes/[phase0, altair, bellatrix],
@@ -182,7 +182,8 @@ proc loadBlock*(
   var blck = parseTest(path, SSZ, consensusFork.SignedBeaconBlock)
   blck.root = hash_tree_root(blck.message)
   when consensusFork >= ConsensusFork.Bellatrix:
-    if blck.message.is_execution_block:
+    if blck.message.is_execution_block and
+        not blck.message.body.execution_payload.transactions.anyIt(it.len == 0):
       if blck.message.body.execution_payload.block_hash !=
           blck.message.compute_execution_block_hash():
         try:
