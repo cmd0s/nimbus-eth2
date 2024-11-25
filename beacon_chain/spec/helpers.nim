@@ -26,7 +26,7 @@ import
 export
   eth2_merkleization, forks, ssz_codec, rlp, eth_types_rlp.append
 
-# https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.8/specs/phase0/weak-subjectivity.md#constants
+# https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.9/specs/phase0/weak-subjectivity.md#constants
 const ETH_TO_GWEI = 1_000_000_000.Gwei
 
 func toEther*(gwei: Gwei): Ether =
@@ -203,7 +203,7 @@ func get_seed*(state: ForkyBeaconState, epoch: Epoch, domain_type: DomainType):
     epoch + EPOCHS_PER_HISTORICAL_VECTOR - MIN_SEED_LOOKAHEAD - 1)
   state.get_seed(epoch, domain_type, mix)
 
-# https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.8/specs/altair/beacon-chain.md#add_flag
+# https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.9/specs/altair/beacon-chain.md#add_flag
 func add_flag*(flags: ParticipationFlags, flag_index: TimelyFlag): ParticipationFlags =
   let flag = ParticipationFlags(1'u8 shl ord(flag_index))
   flags or flag
@@ -388,7 +388,7 @@ func is_merge_transition_complete*(
     default(typeof(state.latest_execution_payload_header))
   state.latest_execution_payload_header != defaultExecutionPayloadHeader
 
-# https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.8/sync/optimistic.md#helpers
+# https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.9/sync/optimistic.md#helpers
 func is_execution_block*(body: SomeForkyBeaconBlockBody): bool =
   when typeof(body).kind >= ConsensusFork.Bellatrix:
     const defaultExecutionPayload =
@@ -463,15 +463,16 @@ func computeRequestsHash(
     WITHDRAWAL_REQUEST_TYPE = 0x01'u8  # EIP-7002
     CONSOLIDATION_REQUEST_TYPE = 0x02'u8  # EIP-7251
 
+  template individualHash(requestType, requestList): Digest =
+    computeDigest:
+      h.update([requestType.byte])
+      for request in requestList:
+        h.update SSZ.encode(request)
+
   let requestsHash = computeDigest:
     template mixInRequests(requestType, requestList): untyped =
-      block:
-        let hash = computeDigest:
-          bind h
-          h.update([requestType.byte])
-          for request in requestList:
-            h.update SSZ.encode(request)
-        h.update(hash.data)
+      if requestList.len > 0:
+        h.update(individualHash(requestType, requestList).data)
 
     static:
       doAssert DEPOSIT_REQUEST_TYPE < WITHDRAWAL_REQUEST_TYPE

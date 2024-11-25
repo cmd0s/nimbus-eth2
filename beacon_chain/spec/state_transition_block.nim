@@ -9,9 +9,9 @@
 
 # State transition - block processing as described in
 # https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.8/specs/phase0/beacon-chain.md#block-processing
-# https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.8/specs/altair/beacon-chain.md#block-processing
+# https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.9/specs/altair/beacon-chain.md#block-processing
 # https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.8/specs/bellatrix/beacon-chain.md#block-processing
-# https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.8/specs/capella/beacon-chain.md#block-processing
+# https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.9/specs/capella/beacon-chain.md#block-processing
 # https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.8/specs/deneb/beacon-chain.md#block-processing
 # https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.7/specs/electra/beacon-chain.md#block-processing
 #
@@ -563,7 +563,7 @@ func process_withdrawal_request*(
 
 # https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.7/specs/electra/beacon-chain.md#new-is_valid_switch_to_compounding_request
 func is_valid_switch_to_compounding_request(
-    state: electra.BeaconState | fulu.BeaconState, 
+    state: electra.BeaconState | fulu.BeaconState,
     consolidation_request: ConsolidationRequest,
     source_validator: Validator): bool =
   # Switch to compounding requires source and target be equal
@@ -663,6 +663,15 @@ func process_consolidation_request*(
   if source_validator[].exit_epoch != FAR_FUTURE_EPOCH:
     return
   if target_validator.exit_epoch != FAR_FUTURE_EPOCH:
+    return
+
+  # Verify the source has been active long enough
+  if current_epoch <
+      source_validator.activation_epoch + cfg.SHARD_COMMITTEE_PERIOD:
+    return
+
+  # Verify the source has no pending withdrawals in the queue
+  if get_pending_balance_to_withdraw(state, source_index) > 0.Gwei:
     return
 
   # Initiate source validator exit and append pending consolidation
@@ -792,11 +801,11 @@ func get_participant_reward*(total_active_balance: Gwei): Gwei =
         WEIGHT_DENOMINATOR div SLOTS_PER_EPOCH
   max_participant_rewards div SYNC_COMMITTEE_SIZE
 
-# https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.8/specs/altair/beacon-chain.md#sync-aggregate-processing
+# https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.9/specs/altair/beacon-chain.md#sync-aggregate-processing
 func get_proposer_reward*(participant_reward: Gwei): Gwei =
   participant_reward * PROPOSER_WEIGHT div (WEIGHT_DENOMINATOR - PROPOSER_WEIGHT)
 
-# https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.8/specs/altair/beacon-chain.md#sync-aggregate-processing
+# https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.9/specs/altair/beacon-chain.md#sync-aggregate-processing
 proc process_sync_aggregate*(
     state: var (altair.BeaconState | bellatrix.BeaconState |
                 capella.BeaconState | deneb.BeaconState | electra.BeaconState |
@@ -1204,7 +1213,7 @@ proc process_block*(
 
   ok(? process_operations(cfg, state, blck.body, 0.Gwei, flags, cache))
 
-# https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.8/specs/altair/beacon-chain.md#block-processing
+# https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.9/specs/altair/beacon-chain.md#block-processing
 # TODO workaround for https://github.com/nim-lang/Nim/issues/18095
 # copy of datatypes/altair.nim
 type SomeAltairBlock =
