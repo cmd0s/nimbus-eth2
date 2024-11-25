@@ -35,6 +35,17 @@ RestJson.useDefaultSerializationFor(
   RestNodePeerCount,
 )
 
+proc normalize*(address: MultiAddress, value: PeerId): MaResult[MultiAddress] =
+  ## Checks if `address` has `p2p` suffix, and if not add it.
+  let
+    protos = ? address.protocols()
+    index = protos.find(multiCodec("p2p"))
+  if index == -1:
+    let suffix = ? MultiAddress.init(multiCodec("p2p"), value)
+    concat(address, suffix)
+  else:
+    ok(address)
+
 proc validateState(states: seq[PeerStateKind]): Result[ConnectionStateSet,
                                                        cstring] =
   var res: set[ConnectionState]
@@ -181,7 +192,9 @@ proc getLastSeenAddress(node: BeaconNode, id: PeerId): string =
 
   if len(temp) > 0:
     sort(temp, compare, SortOrder.Ascending)
-    $temp[0].address
+    let res = normalize(temp[0].address, id).valueOr:
+      return ""
+    $res
   else:
     ""
 
