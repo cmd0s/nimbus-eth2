@@ -586,10 +586,6 @@ proc storeBlock(
         if payload.transactions.anyIt(it.len == 0):
           returnWithError "Execution block contains zero length transactions"
 
-        if payload.block_hash !=
-            signedBlock.message.compute_execution_block_hash():
-          returnWithError "Execution block hash validation failed"
-
         # [New in Deneb:EIP4844]
         when typeof(signedBlock).kind >= ConsensusFork.Deneb:
           let blobsRes = signedBlock.message.is_valid_versioned_hashes
