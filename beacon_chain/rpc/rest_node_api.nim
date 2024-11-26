@@ -122,81 +122,9 @@ proc getProtocolArgument(ma: MultiAddress,
   err("Multiaddress codec has not been found")
 
 proc getLastSeenAddress(node: BeaconNode, id: PeerId): string =
-  # Because `last_seen_p2p_address` is single address but libp2p reports lot of
-  # addresses, we going to sort list of addresses before selecting one. Here
-  # sort order list:
-  # 1. Globally routable IPv6 address.
-  # 2. Globally routable IPv4 address.
-  # 3. Non IPv4/IPv6 multiaddress.
-  # 4. Site-local IPv6 address.
-  # 5. Site-local IPv4 address.
-  # 6. Link-local IPv6 address.
-  # 7. Link-local IPv4 address.
-  # 8. Loopback IPv6 address.
-  # 9. Loopback IPv4 address.
-  # 10. All other IPv6 address types.
-  # 11. All other IPv4 address types.
-  proc compare(
-      a, b: tuple[address: MultiAddress, position: int]
-  ): int {.closure.} = cmp(a.position, b.position)
-  let addresses = node.network.switch.peerStore[AddressBook][id]
-  var temp: seq[tuple[address: MultiAddress, position: int]]
-  for address in addresses:
-    let res =
-      block:
-        let
-          isUDP = UDP.matchPartial(address)
-          isTCP = TCP.matchPartial(address)
-
-        if isUDP or isTCP:
-          # TODO (cheatfate): We match TCP here because `nim-libp2p` do not have
-          # QUIC support yet. So we give TCP addresses priority.
-          let boost = if isUDP: 100 else: 0
-          if IP4.matchPartial(address):
-            let address4 =
-              address.getProtocolArgument(multiCodec("ip4")).valueOr:
-                continue
-            var ta4 = TransportAddress(family: AddressFamily.IPv4)
-            ta4.address_v4[0 .. 3] = address4[0 .. 3]
-            if ta4.isLoopback():
-              (address, boost + 9)
-            elif ta4.isLinkLocal():
-              (address, boost + 7)
-            elif ta4.isSiteLocal():
-              (address, boost + 5)
-            elif ta4.isGlobal():
-              (address, boost + 2)
-            else:
-              (address, boost + 11)
-          elif IP6.matchPartial(address):
-            let address6 =
-              address.getProtocolArgument(multiCodec("ip6")).valueOr:
-                continue
-            var ta6 = TransportAddress(family: AddressFamily.IPv6)
-            ta6.address_v6[0 .. 15] = address6[0 .. 15]
-            if ta6.isLoopback():
-              (address, boost + 8)
-            elif ta6.isLinkLocal():
-              (address, boost + 6)
-            elif ta6.isSiteLocal():
-              (address, boost + 4)
-            elif ta6.isGlobal():
-              (address, boost + 1)
-            else:
-              (address, boost + 10)
-          else:
-            (address, boost + 3)
-        else:
-          (address, 3)
-    temp.add(res)
-
-  if len(temp) > 0:
-    sort(temp, compare, SortOrder.Ascending)
-    let res = normalize(temp[0].address, id).valueOr:
-      return ""
-    $res
-  else:
-    ""
+  let address = node.network.switch.peerStore[LastSeenBook][id].valueOr:
+    return ""
+  $normalize(address, id)
 
 proc getDiscoveryAddresses(node: BeaconNode): seq[string] =
   let
