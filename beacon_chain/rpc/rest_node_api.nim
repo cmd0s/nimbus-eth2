@@ -122,9 +122,12 @@ proc getProtocolArgument(ma: MultiAddress,
   err("Multiaddress codec has not been found")
 
 proc getLastSeenAddress(node: BeaconNode, id: PeerId): string =
-  let address = node.network.switch.peerStore[LastSeenBook][id].valueOr:
-    return ""
-  $normalize(address, id)
+  let
+    address = node.network.switch.peerStore[LastSeenBook][id].valueOr:
+      return ""
+    normalized = address.normalize(id).valueOr:
+      return ""
+  $normalized
 
 proc getDiscoveryAddresses(node: BeaconNode): seq[string] =
   let
