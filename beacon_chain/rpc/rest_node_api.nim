@@ -7,7 +7,6 @@
 {.push raises: [].}
 
 import
-  std/algorithm,
   stew/byteutils,
   chronicles,
   eth/p2p/discoveryv5/enr,
