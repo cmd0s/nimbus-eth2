@@ -109,18 +109,6 @@ proc toString(direction: PeerType): string =
   of PeerType.Outgoing:
     "outbound"
 
-proc getProtocolArgument(ma: MultiAddress,
-                         codec: MultiCodec): MaResult[seq[byte]] =
-  var buffer: seq[byte]
-  for item in ma:
-    let
-      ritem = ? item
-      code = ? ritem.protoCode()
-    if code == codec:
-      let arg = ? ritem.protoAddress()
-      return ok(arg)
-  err("Multiaddress codec has not been found")
-
 proc getLastSeenAddress(node: BeaconNode, id: PeerId): string =
   let
     address = node.network.switch.peerStore[LastSeenBook][id].valueOr:
