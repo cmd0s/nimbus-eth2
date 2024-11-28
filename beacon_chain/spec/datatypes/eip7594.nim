@@ -12,7 +12,6 @@ import
   "."/[altair, base, deneb], 
   kzg4844
 
-from std/sequtils import mapIt
 from std/strutils import join
 
 export base

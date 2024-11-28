@@ -180,14 +180,20 @@ proc reconstruction_terms*(blobIdx: int,
     cell_ids = newSeqOfCap[CellID](columnCount)
     ckzgCells = newSeqOfCap[KzgCell](columnCount)
 
+  cell_ids.setLen(0)
+  ckzgCells.setLen(0)
+
   for col in data_columns:
     cell_ids.add col.index
     let cell = col.column[blobIdx]
     ckzgCells.add cell
 
+
+  debugEcho "for blob index"
+  debugEcho blobIdx
   # Call the recovery function and handle results
   let recovered_cell_and_proof = recoverCellsAndKzgProofs(cell_ids, ckzgCells)
-  if not recovered_cell_and_proof.isOk:
+  if recovered_cell_and_proof.isErr:
     return err("Issue with computing cells and proofs!")
   ok(recovered_cell_and_proof.get)
  
@@ -212,6 +218,7 @@ proc recover_cells_and_proofs_parallel*(
     recovered_cps = newSeq[CellsAndProofs](blobCount)
 
   # Schedule tasks on the threadpool
+  debugEcho "Scheduling tasks on the threadpool..."
   for blobIdx in 0..<blobCount:
     pendingFuts[blobIdx] = 
       tp.spawn reconstruction_terms(blobIdx, columnCount, data_columns)
@@ -235,7 +242,7 @@ proc parallelColumnReconstruction*(
       Taskpool.new()
     except Exception:
       return err("Failed to initialize Taskpool")
-
+  debugEcho "first call to recover c and p parallel"
   let res = tp.recover_cells_and_proofs_parallel(data_columns)
   
   ok(res.get)
