@@ -359,8 +359,8 @@ proc groupDataColumns*[T](req: SyncRequest[T],
                           Result[seq[DataColumnSidecars], string] =
   var
     grouped = newSeq[DataColumnSidecars](len(blocks))
-    groupedAndReconstructed = 
-      newSeq[DataColumnSidecars](len(blocks))
+    # groupedAndReconstructed = 
+    #   newSeq[DataColumnSidecars](len(blocks))
     column_cursor = 0
   for block_idx, blck in blocks:
     withBlck(blck[]):
@@ -379,20 +379,20 @@ proc groupDataColumns*[T](req: SyncRequest[T],
           grouped[block_idx].add(data_column_sidecar)
           inc column_cursor
   
-  for block_idx, blck in blocks:
-    withBlck(blck[]):
-      when consensusFork >= ConsensusFork.Deneb:
-        template kzgs: untyped = forkyBlck.message.body.blob_kzg_commitments
-        if kzgs.len == 0:
-          continue
-        if grouped[block_idx].len >= (NUMBER_OF_COLUMNS div 2):
-          let
-            recovered_cps = recover_cells_and_proofs(grouped[block_idx].mapIt(it[]))
-            recovered_cols = get_data_column_sidecars(forkyBlck, recovered_cps.get)
-            refSeq = recovered_cols.mapIt(newClone it)
-          groupedAndReconstructed[block_idx].add(refSeq)
-        else:
-          groupedAndReconstructed[block_idx].add(grouped[block_idx])
+  # for block_idx, blck in blocks:
+  #   withBlck(blck[]):
+  #     when consensusFork >= ConsensusFork.Deneb:
+  #       template kzgs: untyped = forkyBlck.message.body.blob_kzg_commitments
+  #       if kzgs.len == 0:
+  #         continue
+  #       if grouped[block_idx].len >= (NUMBER_OF_COLUMNS div 2):
+  #         let
+  #           recovered_cps = recover_cells_and_proofs(grouped[block_idx].mapIt(it[]))
+  #           recovered_cols = get_data_column_sidecars(forkyBlck, recovered_cps.get)
+  #           refSeq = recovered_cols.mapIt(newClone it)
+  #         groupedAndReconstructed[block_idx].add(refSeq)
+  #       else:
+  #         groupedAndReconstructed[block_idx].add(grouped[block_idx])
 
   # if column_cursor != len(data_columns):
   #   # we reached end of blocks without consuming all data columns so either
@@ -400,7 +400,7 @@ proc groupDataColumns*[T](req: SyncRequest[T],
   #   # peer is sending us spurious data columns.
   #   Result[seq[DataColumnSidecars], string].err "invalid block or data column sequence"
   # else:
-  Result[seq[DataColumnSidecars], string].ok groupedAndReconstructed
+  Result[seq[DataColumnSidecars], string].ok grouped
 
 proc checkDataColumns(data_columns: seq[DataColumnSidecars]): Result[void, string] =
   for data_column_sidecars in data_columns:
