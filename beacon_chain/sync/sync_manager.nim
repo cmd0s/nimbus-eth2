@@ -342,17 +342,6 @@ proc getDataColumnSidecars[A, B](man: SyncManager[A, B], peer: A,
   debug "Requesting data column sidecars from peer", request = req
   dataColumnSidecarsByRange(peer, req.slot, req.count, localCustodyColumns)
 
-proc reconstructWhileColumnSync*(blck: deneb.SignedBeaconBlock |
-                                 electra.SignedBeaconBlock,
-                                 columns: seq[ref DataColumnSidecar]):
-                                 seq[ref DataColumnSidecar] = 
-  let
-    recovered_cps = recover_cells_and_proofs(columns.mapIt(it[]))
-    recovered_cols = get_data_column_sidecars(blck, recovered_cps.get)
-    refSeq = recovered_cols.mapIt(newClone it)
-
-  refSeq
-
 proc groupDataColumns*[T](req: SyncRequest[T],
                           blocks: seq[ref ForkedSignedBeaconBlock],
                           data_columns: seq[ref DataColumnSidecar]):
