@@ -26,7 +26,7 @@ import
 export
   eth2_merkleization, forks, ssz_codec, rlp, eth_types_rlp.append
 
-# https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.8/specs/phase0/weak-subjectivity.md#constants
+# https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.9/specs/phase0/weak-subjectivity.md#constants
 const ETH_TO_GWEI = 1_000_000_000.Gwei
 
 func toEther*(gwei: Gwei): Ether =
@@ -203,7 +203,7 @@ func get_seed*(state: ForkyBeaconState, epoch: Epoch, domain_type: DomainType):
     epoch + EPOCHS_PER_HISTORICAL_VECTOR - MIN_SEED_LOOKAHEAD - 1)
   state.get_seed(epoch, domain_type, mix)
 
-# https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.8/specs/altair/beacon-chain.md#add_flag
+# https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.9/specs/altair/beacon-chain.md#add_flag
 func add_flag*(flags: ParticipationFlags, flag_index: TimelyFlag): ParticipationFlags =
   let flag = ParticipationFlags(1'u8 shl ord(flag_index))
   flags or flag
@@ -227,7 +227,8 @@ func verify_blob_sidecar_inclusion_proof*(
   ok()
 
 func create_blob_sidecars*(
-    forkyBlck: deneb.SignedBeaconBlock | electra.SignedBeaconBlock,
+    forkyBlck: deneb.SignedBeaconBlock | electra.SignedBeaconBlock |
+    fulu.SignedBeaconBlock,
     kzg_proofs: KzgProofs,
     blobs: Blobs): seq[BlobSidecar] =
   template kzg_commitments: untyped =
@@ -382,12 +383,12 @@ func contextEpoch*(update: SomeForkyLightClientUpdate): Epoch =
 # https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.8/specs/bellatrix/beacon-chain.md#is_merge_transition_complete
 func is_merge_transition_complete*(
     state: bellatrix.BeaconState | capella.BeaconState | deneb.BeaconState |
-           electra.BeaconState): bool =
+           electra.BeaconState | fulu.BeaconState): bool =
   const defaultExecutionPayloadHeader =
     default(typeof(state.latest_execution_payload_header))
   state.latest_execution_payload_header != defaultExecutionPayloadHeader
 
-# https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.8/sync/optimistic.md#helpers
+# https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.9/sync/optimistic.md#helpers
 func is_execution_block*(blck: SomeForkyBeaconBlock): bool =
   when typeof(blck).kind >= ConsensusFork.Bellatrix:
     const defaultExecutionPayload =
@@ -399,7 +400,7 @@ func is_execution_block*(blck: SomeForkyBeaconBlock): bool =
 # https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.8/specs/bellatrix/beacon-chain.md#is_merge_transition_block
 func is_merge_transition_block(
     state: bellatrix.BeaconState | capella.BeaconState | deneb.BeaconState |
-           electra.BeaconState,
+           electra.BeaconState | fulu.BeaconState,
     body: bellatrix.BeaconBlockBody | bellatrix.TrustedBeaconBlockBody |
           bellatrix.SigVerifiedBeaconBlockBody |
           capella.BeaconBlockBody | capella.TrustedBeaconBlockBody |
@@ -407,7 +408,9 @@ func is_merge_transition_block(
           deneb.BeaconBlockBody | deneb.TrustedBeaconBlockBody |
           deneb.SigVerifiedBeaconBlockBody |
           electra.BeaconBlockBody | electra.TrustedBeaconBlockBody |
-          electra.SigVerifiedBeaconBlockBody): bool =
+          electra.SigVerifiedBeaconBlockBody |
+          fulu.BeaconBlockBody | fulu.TrustedBeaconBlockBody |
+          fulu.SigVerifiedBeaconBlockBody): bool =
   const defaultExecutionPayload = default(typeof(body.execution_payload))
   not is_merge_transition_complete(state) and
     body.execution_payload != defaultExecutionPayload
@@ -415,7 +418,7 @@ func is_merge_transition_block(
 # https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.8/specs/bellatrix/beacon-chain.md#is_execution_enabled
 func is_execution_enabled*(
     state: bellatrix.BeaconState | capella.BeaconState | deneb.BeaconState |
-           electra.BeaconState,
+           electra.BeaconState | fulu.BeaconState,
     body: bellatrix.BeaconBlockBody | bellatrix.TrustedBeaconBlockBody |
           bellatrix.SigVerifiedBeaconBlockBody |
           capella.BeaconBlockBody | capella.TrustedBeaconBlockBody |
@@ -423,7 +426,9 @@ func is_execution_enabled*(
           deneb.BeaconBlockBody | deneb.TrustedBeaconBlockBody |
           deneb.SigVerifiedBeaconBlockBody |
           electra.BeaconBlockBody | electra.TrustedBeaconBlockBody |
-          electra.SigVerifiedBeaconBlockBody): bool =
+          electra.SigVerifiedBeaconBlockBody |
+          fulu.BeaconBlockBody | fulu.TrustedBeaconBlockBody |
+          fulu.SigVerifiedBeaconBlockBody): bool =
   is_merge_transition_block(state, body) or is_merge_transition_complete(state)
 
 # https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.8/specs/bellatrix/beacon-chain.md#compute_timestamp_at_slot
@@ -455,15 +460,16 @@ func computeRequestsHash(
     WITHDRAWAL_REQUEST_TYPE = 0x01'u8  # EIP-7002
     CONSOLIDATION_REQUEST_TYPE = 0x02'u8  # EIP-7251
 
+  template individualHash(requestType, requestList): Digest =
+    computeDigest:
+      h.update([requestType.byte])
+      for request in requestList:
+        h.update SSZ.encode(request)
+
   let requestsHash = computeDigest:
     template mixInRequests(requestType, requestList): untyped =
-      block:
-        let hash = computeDigest:
-          bind h
-          h.update([requestType.byte])
-          for request in requestList:
-            h.update SSZ.encode(request)
-        h.update(hash.data)
+      if requestList.len > 0:
+        h.update(individualHash(requestType, requestList).data)
 
     static:
       doAssert DEPOSIT_REQUEST_TYPE < WITHDRAWAL_REQUEST_TYPE

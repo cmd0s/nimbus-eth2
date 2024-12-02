@@ -304,7 +304,8 @@ template validateBeaconBlockBellatrix(
       bellatrix.SignedBeaconBlock |
       capella.SignedBeaconBlock |
       deneb.SignedBeaconBlock |
-      electra.SignedBeaconBlock,
+      electra.SignedBeaconBlock |
+      fulu.SignedBeaconBlock,
     parent: BlockRef): untyped =
   # If the execution is enabled for the block -- i.e.
   # is_execution_enabled(state, block.body) then validate the following:
@@ -1316,7 +1317,7 @@ proc validateAggregate*(
 
   ok((attesting_indices, sig))
 
-# https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.8/specs/capella/p2p-interface.md#bls_to_execution_change
+# https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.9/specs/capella/p2p-interface.md#bls_to_execution_change
 proc validateBlsToExecutionChange*(
     pool: ValidatorChangePool, batchCrypto: ref BatchCrypto,
     signed_address_change: SignedBLSToExecutionChange,

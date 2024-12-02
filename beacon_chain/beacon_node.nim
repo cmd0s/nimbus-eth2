@@ -22,10 +22,12 @@ import
   ./el/el_manager,
   ./consensus_object_pools/[
     blockchain_dag, blob_quarantine, block_quarantine, consensus_manager,
-    data_column_quarantine, attestation_pool, sync_committee_msg_pool, validator_change_pool],
+    data_column_quarantine, attestation_pool, sync_committee_msg_pool, validator_change_pool,
+    blockchain_list],
   ./spec/datatypes/[base, altair],
   ./spec/eth2_apis/dynamic_fee_recipients,
-  ./sync/[branch_discovery, sync_manager, request_manager],
+  ./spec/signatures_batch,
+  ./sync/[branch_discovery, sync_manager, request_manager, sync_types],
   ./validators/[
     action_tracker, message_router, validator_monitor, validator_pool,
     keystore_management],
@@ -38,7 +40,7 @@ export
   eth2_network, el_manager, branch_discovery, request_manager, sync_manager,
   eth2_processor, optimistic_processor, blockchain_dag, block_quarantine,
   base, message_router, validator_monitor, validator_pool,
-  consensus_manager, dynamic_fee_recipients
+  consensus_manager, dynamic_fee_recipients, sync_types
 
 type
   EventBus* = object
@@ -57,6 +59,7 @@ type
       RestVersioned[ForkedLightClientFinalityUpdate]]
     optUpdateQueue*: AsyncEventQueue[
       RestVersioned[ForkedLightClientOptimisticUpdate]]
+    optFinHeaderUpdateQueue*: AsyncEventQueue[ForkedLightClientHeader]
 
   BeaconNode* = ref object
     nickname*: string
@@ -67,10 +70,11 @@ type
     config*: BeaconNodeConf
     attachedValidators*: ref ValidatorPool
     optimisticProcessor*: OptimisticProcessor
-    optimisticFcuFut*: Future[(PayloadExecutionStatus, Opt[BlockHash])]
+    optimisticFcuFut*: Future[(PayloadExecutionStatus, Opt[Hash32])]
       .Raising([CancelledError])
     lightClient*: LightClient
     dag*: ChainDAGRef
+    list*: ChainListRef
     quarantine*: ref Quarantine
     blobQuarantine*: ref BlobQuarantine
     dataColumnQuarantine*: ref DataColumnQuarantine
@@ -89,8 +93,11 @@ type
     syncManager*: SyncManager[Peer, PeerId]
     backfiller*: SyncManager[Peer, PeerId]
     branchDiscovery*: ref BranchDiscovery[Peer, PeerId]
+    untrustedManager*: SyncManager[Peer, PeerId]
+    syncOverseer*: SyncOverseerRef
     genesisSnapshotContent*: string
     processor*: ref Eth2Processor
+    batchVerifier*: ref BatchVerifier
     blockProcessor*: ref BlockProcessor
     consensusManager*: ref ConsensusManager
     attachedValidatorBalanceTotal*: Gwei

@@ -179,13 +179,20 @@ type
     source_pubkey*: ValidatorPubKey
     target_pubkey*: ValidatorPubKey
 
-  # https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.8/specs/phase0/validator.md#aggregateandproof
+  # https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.9/specs/electra/beacon-chain.md#singleattestation
+  SingleAttestation* = object
+    committee_index*: uint64
+    attester_index*: uint64
+    data*: AttestationData
+    signature*: ValidatorSig
+
+  # https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.9/specs/phase0/validator.md#aggregateandproof
   AggregateAndProof* = object
     aggregator_index*: uint64 # `ValidatorIndex` after validation
     aggregate*: Attestation
     selection_proof*: ValidatorSig
 
-  # https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.8/specs/phase0/validator.md#signedaggregateandproof
+  # https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.9/specs/phase0/validator.md#signedaggregateandproof
   SignedAggregateAndProof* = object
     message*: AggregateAndProof
     signature*: ValidatorSig
