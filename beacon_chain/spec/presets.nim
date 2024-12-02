@@ -42,7 +42,7 @@ type
 
     # Transition
     TERMINAL_TOTAL_DIFFICULTY*: UInt256
-    TERMINAL_BLOCK_HASH*: BlockHash
+    TERMINAL_BLOCK_HASH*: Hash32
     TERMINAL_BLOCK_HASH_ACTIVATION_EPOCH*: Epoch  # Not actively used, but part of the spec
 
     # Genesis
@@ -62,6 +62,8 @@ type
     DENEB_FORK_EPOCH*: Epoch
     ELECTRA_FORK_VERSION*: Version
     ELECTRA_FORK_EPOCH*: Epoch
+    FULU_FORK_VERSION*: Version
+    FULU_FORK_EPOCH*: Epoch
 
     # Time parameters
     # TODO SECONDS_PER_SLOT*: uint64
@@ -164,7 +166,7 @@ when const_preset == "mainnet":
     TERMINAL_TOTAL_DIFFICULTY:
       u256"115792089237316195423570985008687907853269984665640564039457584007913129638912",
     # By default, don't use these params
-    TERMINAL_BLOCK_HASH: BlockHash.fromHex(
+    TERMINAL_BLOCK_HASH: Hash32.fromHex(
       "0x0000000000000000000000000000000000000000000000000000000000000000"),
 
     # Genesis
@@ -199,6 +201,9 @@ when const_preset == "mainnet":
     # Electra
     ELECTRA_FORK_VERSION: Version [byte 0x05, 0x00, 0x00, 0x00],
     ELECTRA_FORK_EPOCH: FAR_FUTURE_EPOCH,
+    # Fulu
+    FULU_FORK_VERSION: Version [byte 0x06, 0x00, 0x00, 0x00],
+    FULU_FORK_EPOCH: FAR_FUTURE_EPOCH,
 
     # Time parameters
     # ---------------------------------------------------------------
@@ -348,7 +353,9 @@ elif const_preset == "gnosis":
     # Electra
     ELECTRA_FORK_VERSION: Version [byte 0x05, 0x00, 0x00, 0x64],
     ELECTRA_FORK_EPOCH: FAR_FUTURE_EPOCH,
-
+    # Fulu
+    FULU_FORK_VERSION: Version [byte 0x06, 0x00, 0x00, 0x00],
+    FULU_FORK_EPOCH: FAR_FUTURE_EPOCH,
 
     # Time parameters
     # ---------------------------------------------------------------
@@ -457,7 +464,7 @@ elif const_preset == "minimal":
     TERMINAL_TOTAL_DIFFICULTY:
       u256"115792089237316195423570985008687907853269984665640564039457584007913129638912",
     # By default, don't use these params
-    TERMINAL_BLOCK_HASH: BlockHash.fromHex(
+    TERMINAL_BLOCK_HASH: Hash32.fromHex(
       "0x0000000000000000000000000000000000000000000000000000000000000000"),
 
 
@@ -493,7 +500,9 @@ elif const_preset == "minimal":
     # Electra
     ELECTRA_FORK_VERSION: Version [byte 0x05, 0x00, 0x00, 0x01],
     ELECTRA_FORK_EPOCH: Epoch(uint64.high),
-
+    # Fulu
+    FULU_FORK_VERSION: Version [byte 0x06, 0x00, 0x00, 0x01],
+    FULU_FORK_EPOCH: Epoch(uint64.high),
 
     # Time parameters
     # ---------------------------------------------------------------
@@ -643,8 +652,8 @@ template parse(T: type string, input: string): T =
 template parse(T: type Eth1Address, input: string): T =
   Eth1Address.fromHex(input)
 
-template parse(T: type BlockHash, input: string): T =
-  BlockHash.fromHex(input)
+template parse(T: type Hash32, input: string): T =
+  Hash32.fromHex(input)
 
 template parse(T: type UInt256, input: string): T =
   parse(input, UInt256, 10)
@@ -787,7 +796,7 @@ proc readRuntimeConfig*(
                      "MAX_REQUEST_BLOB_SIDECARS"
   checkCompatibility BLOB_SIDECAR_SUBNET_COUNT
 
-  # https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.6/specs/phase0/fork-choice.md#configuration
+  # https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.9/specs/phase0/fork-choice.md#configuration
   # Isn't being used as a preset in the usual way: at any time, there's one correct value
   checkCompatibility PROPOSER_SCORE_BOOST
   checkCompatibility REORG_HEAD_WEIGHT_THRESHOLD

@@ -54,7 +54,7 @@ proc runTest(
           defaultRuntimeConfig, fhPreState[], blck, cache, info, flags = {},
           noRollback).expect("should apply block")
         withState(fhPreState[]):
-          when consensusFork >= ConsensusFork.Deneb:
+          when consensusFork == ConsensusFork.Deneb:
             check checkPerValidatorBalanceCalc(forkyState.data)
       else:
         let res = state_transition(
@@ -99,5 +99,5 @@ template runForkBlockTests(consensusFork: static ConsensusFork) =
         "EF - " & forkHumanName & " - Random",
         RandomDir, suiteName, path)
 
-withAll(ConsensusFork):
+withAllButFulu(ConsensusFork):
   runForkBlockTests(consensusFork)

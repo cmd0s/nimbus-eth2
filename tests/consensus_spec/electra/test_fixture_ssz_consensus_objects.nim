@@ -157,9 +157,8 @@ suite "EF - Electra - SSZ consensus objects " & preset():
           of "LightClientOptimisticUpdate":
             checkSSZ(electra.LightClientOptimisticUpdate, path, hash)
           of "PendingAttestation": checkSSZ(PendingAttestation, path, hash)
-          of "PendingBalanceDeposit":
-            checkSSZ(PendingBalanceDeposit, path, hash)
           of "PendingConsolidation": checkSSZ(PendingConsolidation, path, hash)
+          of "PendingDeposit": checkSSZ(PendingDeposit, path, hash)
           of "PendingPartialWithdrawal":
             checkSSZ(PendingPartialWithdrawal, path, hash)
           of "PowBlock": checkSSZ(PowBlock, path, hash)
@@ -176,6 +175,7 @@ suite "EF - Electra - SSZ consensus objects " & preset():
             checkSSZ(SignedContributionAndProof, path, hash)
           of "SignedVoluntaryExit": checkSSZ(SignedVoluntaryExit, path, hash)
           of "SigningData": checkSSZ(SigningData, path, hash)
+          of "SingleAttestation": checkSSZ(SingleAttestation, path, hash)
           of "SyncAggregate": checkSSZ(SyncAggregate, path, hash)
           of "SyncAggregatorSelectionData":
             checkSSZ(SyncAggregatorSelectionData, path, hash)

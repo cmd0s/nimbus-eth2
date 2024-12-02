@@ -330,12 +330,6 @@ type
         defaultValue: false
         name: "enr-auto-update" .}: bool
 
-      enableYamux* {.
-        hidden
-        desc: "Enable the Yamux multiplexer"
-        defaultValue: false
-        name: "debug-enable-yamux" .}: bool
-
       weakSubjectivityCheckpoint* {.
         desc: "Weak subjectivity checkpoint in the format block_root:epoch_number"
         name: "weak-subjectivity-checkpoint" .}: Option[Checkpoint]
@@ -1132,6 +1126,8 @@ type
       name: "tls-key" .}: Option[InputFile]
 
   AnyConf* = BeaconNodeConf | ValidatorClientConf | SigningNodeConf
+
+  Address = primitives.Address
 
 proc defaultDataDir*[Conf](config: Conf): string =
   let dataDir = when defined(windows):

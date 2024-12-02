@@ -19,6 +19,16 @@ from ".."/datatypes/capella import SignedBeaconBlock
 
 export chronos, client, rest_types, eth2_rest_serialization
 
+type
+  ForkySignedBlockContents* =
+    phase0.SignedBeaconBlock |
+    altair.SignedBeaconBlock |
+    bellatrix.SignedBeaconBlock |
+    capella.SignedBeaconBlock |
+    DenebSignedBlockContents |
+    ElectraSignedBlockContents |
+    FuluSignedBlockContents
+
 proc getGenesis*(): RestResponse[GetGenesisResponse] {.
      rest, endpoint: "/eth/v1/beacon/genesis",
      meth: MethodGet.}
@@ -97,9 +107,10 @@ proc getBlockHeaderPlain*(block_id: BlockIdent): RestPlainResponse {.
   ## https://ethereum.github.io/beacon-APIs/#/Beacon/getBlockHeader
 
 proc getBlockHeader*(
-       client: RestClientRef,
-       block_id: BlockIdent
-     ): Future[Opt[GetBlockHeaderResponse]] {.async.} =
+    client: RestClientRef,
+    block_id: BlockIdent
+): Future[Opt[GetBlockHeaderResponse]] {.
+   async: (raises: [CancelledError, RestError, RestResponseError]).} =
   ## https://ethereum.github.io/beacon-APIs/#/Beacon/getBlockHeader
   let resp = await client.getBlockHeaderPlain(block_id)
   return
@@ -153,6 +164,11 @@ proc publishBlock*(body: ElectraSignedBlockContents): RestPlainResponse {.
      meth: MethodPost.}
   ## https://ethereum.github.io/beacon-APIs/#/Beacon/publishBlock
 
+proc publishBlock*(body: FuluSignedBlockContents): RestPlainResponse {.
+     rest, endpoint: "/eth/v1/beacon/blocks",
+     meth: MethodPost.}
+  ## https://ethereum.github.io/beacon-APIs/#/Beacon/publishBlock
+
 proc publishSszBlock*(
        client: RestClientRef,
        blck: ForkySignedBeaconBlock
@@ -165,44 +181,98 @@ proc publishSszBlock*(
       extraHeaders = @[("eth-consensus-version", consensus)])
   return resp
 
-proc publishBlockV2Plain(body: phase0.SignedBeaconBlock): RestPlainResponse {.
-     rest, endpoint: "/eth/v2/beacon/blocks",
-     meth: MethodPost.}
+proc publishBlockV2(
+    broadcast_validation: Option[BroadcastValidationType],
+    body: phase0.SignedBeaconBlock
+): RestPlainResponse {.rest, endpoint: "/eth/v2/beacon/blocks",
+   meth: MethodPost.}
   ## https://ethereum.github.io/beacon-APIs/#/Beacon/publishBlockV2
 
-proc publishBlockV2Plain(body: altair.SignedBeaconBlock): RestPlainResponse {.
-     rest, endpoint: "/eth/v2/beacon/blocks",
-     meth: MethodPost.}
+proc publishBlockV2(
+    broadcast_validation: Option[BroadcastValidationType],
+    body: altair.SignedBeaconBlock
+): RestPlainResponse {.rest, endpoint: "/eth/v2/beacon/blocks",
+   meth: MethodPost.}
   ## https://ethereum.github.io/beacon-APIs/#/Beacon/publishBlockV2
 
-proc publishBlockV2Plain(body: bellatrix.SignedBeaconBlock): RestPlainResponse {.
-     rest, endpoint: "/eth/v2/beacon/blocks",
-     meth: MethodPost.}
+proc publishBlockV2(
+    broadcast_validation: Option[BroadcastValidationType],
+    body: bellatrix.SignedBeaconBlock
+): RestPlainResponse {.rest, endpoint: "/eth/v2/beacon/blocks",
+   meth: MethodPost.}
   ## https://ethereum.github.io/beacon-APIs/#/Beacon/publishBlockV2
 
-proc publishBlockV2Plain(body: capella.SignedBeaconBlock): RestPlainResponse {.
-     rest, endpoint: "/eth/v2/beacon/blocks",
-     meth: MethodPost.}
+proc publishBlockV2(
+    broadcast_validation: Option[BroadcastValidationType],
+    body: capella.SignedBeaconBlock
+): RestPlainResponse {.rest, endpoint: "/eth/v2/beacon/blocks",
+   meth: MethodPost.}
   ## https://ethereum.github.io/beacon-APIs/#/Beacon/publishBlockV2
 
-proc publishBlockV2Plain(body: DenebSignedBlockContents): RestPlainResponse {.
-     rest, endpoint: "/eth/v2/beacon/blocks",
-     meth: MethodPost.}
+proc publishBlockV2(
+    broadcast_validation: Option[BroadcastValidationType],
+    body: DenebSignedBlockContents
+): RestPlainResponse {.rest, endpoint: "/eth/v2/beacon/blocks",
+   meth: MethodPost.}
   ## https://ethereum.github.io/beacon-APIs/#/Beacon/publishBlockV2
+
+proc publishBlockV2(
+    broadcast_validation: Option[BroadcastValidationType],
+    body: ElectraSignedBlockContents
+): RestPlainResponse {.rest, endpoint: "/eth/v2/beacon/blocks",
+   meth: MethodPost.}
+  ## https://ethereum.github.io/beacon-APIs/#/Beacon/publishBlockV2
+
+proc publishBlockV2(
+    broadcast_validation: Option[BroadcastValidationType],
+    body: FuluSignedBlockContents
+): RestPlainResponse {.rest, endpoint: "/eth/v2/beacon/blocks",
+   meth: MethodPost.}
+  ## https://ethereum.github.io/beacon-APIs/#/Beacon/publishBlockV2
+
 
 proc publishBlockV2*(
-       client: RestClientRef,
-       blck: phase0.SignedBeaconBlock | altair.SignedBeaconBlock |
-       bellatrix.SignedBeaconBlock | capella.SignedBeaconBlock |
-       deneb.SignedBeaconBlock
-     ): Future[RestPlainResponse] {.async} =
-  let
-    consensus = typeof(blck).kind.toString()
-    resp = await client.publishBlockV2Plain(
-      blck, extraHeaders = @[
-        ("eth-consensus-version", consensus),
-        ("broadcast_validation", "gossip")])
-  return resp
+    client: RestClientRef,
+    broadcast_validation: Option[BroadcastValidationType],
+    blck: ForkySignedBlockContents
+): Future[RestPlainResponse] {.
+   async: (raises: [CancelledError, RestEncodingError, RestDnsResolveError,
+                    RestCommunicationError], raw: true).} =
+  let consensus =
+    when blck is DenebSignedBlockContents:
+      ConsensusFork.Deneb.toString()
+    elif blck is ElectraSignedBlockContents:
+      ConsensusFork.Electra.toString()
+    elif blck is FuluSignedBlockContents:
+      ConsensusFork.Fulu.toString()
+    else:
+      typeof(blck).kind.toString()
+  client.publishBlockV2(
+    broadcast_validation,
+    blck,
+    extraHeaders = @[("eth-consensus-version", consensus)])
+
+proc publishSszBlockV2*(
+    client: RestClientRef,
+    broadcast_validation: Option[BroadcastValidationType],
+    blck: ForkySignedBlockContents
+): Future[RestPlainResponse] {.
+   async: (raises: [CancelledError, RestEncodingError, RestDnsResolveError,
+                    RestCommunicationError], raw: true).} =
+  let consensus =
+    when blck is DenebSignedBlockContents:
+      ConsensusFork.Deneb.toString()
+    elif blck is ElectraSignedBlockContents:
+      ConsensusFork.Electra.toString()
+    elif blck is FuluSignedBlockContents:
+      ConsensusFork.Fulu.toString()
+    else:
+      typeof(blck).kind.toString()
+  client.publishBlockV2(
+    broadcast_validation,
+    blck,
+    restContentType = $OctetStreamMediaType,
+    extraHeaders = @[("eth-consensus-version", consensus)])
 
 proc publishBlindedBlock*(body: phase0.SignedBeaconBlock): RestPlainResponse {.
      rest, endpoint: "/eth/v1/beacon/blinded_blocks",
@@ -238,17 +308,99 @@ proc publishBlindedBlock*(body: electra_mev.SignedBlindedBeaconBlock):
      meth: MethodPost.}
   ## https://ethereum.github.io/beacon-APIs/#/Beacon/publishBlindedBlock
 
-proc publishSszBlindedBlock*(
-       client: RestClientRef,
-       blck: ForkySignedBeaconBlock
-     ): Future[RestPlainResponse] {.async.} =
+proc publishBlindedBlock*(body: fulu_mev.SignedBlindedBeaconBlock):
+       RestPlainResponse {.
+     rest, endpoint: "/eth/v1/beacon/blinded_blocks",
+     meth: MethodPost.}
   ## https://ethereum.github.io/beacon-APIs/#/Beacon/publishBlindedBlock
-  let
-    consensus = typeof(blck).kind.toString()
-    resp = await client.publishBlindedBlock(
-      blck, restContentType = $OctetStreamMediaType,
-      extraHeaders = @[("eth-consensus-version", consensus)])
-  return resp
+
+proc publishSszBlindedBlock*(
+    client: RestClientRef,
+    blck: ForkySignedBeaconBlock
+): Future[RestPlainResponse] {.
+   async: (raises: [CancelledError, RestEncodingError, RestDnsResolveError,
+                    RestCommunicationError], raw: true).} =
+  ## https://ethereum.github.io/beacon-APIs/#/Beacon/publishBlindedBlock
+  let consensus = typeof(blck).kind.toString()
+  client.publishBlindedBlock(
+    blck, restContentType = $OctetStreamMediaType,
+    extraHeaders = @[("eth-consensus-version", consensus)])
+
+proc publishBlindedBlockV2*(
+    broadcast_validation: Option[BroadcastValidationType],
+    body: phase0.SignedBeaconBlock
+): RestPlainResponse {.rest, endpoint: "/eth/v2/beacon/blinded_blocks",
+   meth: MethodPost.}
+  ## https://ethereum.github.io/beacon-APIs/#/Beacon/publishBlindedBlock
+
+proc publishBlindedBlockV2*(
+    broadcast_validation: Option[BroadcastValidationType],
+    body: altair.SignedBeaconBlock
+): RestPlainResponse {.rest, endpoint: "/eth/v2/beacon/blinded_blocks",
+   meth: MethodPost.}
+  ## https://ethereum.github.io/beacon-APIs/#/Beacon/publishBlindedBlock
+
+proc publishBlindedBlockV2*(
+    broadcast_validation: Option[BroadcastValidationType],
+    body: bellatrix_mev.SignedBlindedBeaconBlock
+): RestPlainResponse {.rest, endpoint: "/eth/v2/beacon/blinded_blocks",
+   meth: MethodPost.}
+  ## https://ethereum.github.io/beacon-APIs/#/Beacon/publishBlindedBlock
+
+proc publishBlindedBlockV2*(
+    broadcast_validation: Option[BroadcastValidationType],
+    body: capella_mev.SignedBlindedBeaconBlock
+): RestPlainResponse {.rest, endpoint: "/eth/v2/beacon/blinded_blocks",
+   meth: MethodPost.}
+  ## https://ethereum.github.io/beacon-APIs/#/Beacon/publishBlindedBlock
+
+proc publishBlindedBlockV2*(
+    broadcast_validation: Option[BroadcastValidationType],
+    body: deneb_mev.SignedBlindedBeaconBlock
+): RestPlainResponse {.rest, endpoint: "/eth/v2/beacon/blinded_blocks",
+   meth: MethodPost.}
+  ## https://ethereum.github.io/beacon-APIs/#/Beacon/publishBlindedBlock
+
+proc publishBlindedBlockV2*(
+    broadcast_validation: Option[BroadcastValidationType],
+    body: electra_mev.SignedBlindedBeaconBlock
+): RestPlainResponse {.rest, endpoint: "/eth/v2/beacon/blinded_blocks",
+   meth: MethodPost.}
+  ## https://ethereum.github.io/beacon-APIs/#/Beacon/publishBlindedBlock
+
+proc publishBlindedBlockV2*(
+    broadcast_validation: Option[BroadcastValidationType],
+    body: fulu_mev.SignedBlindedBeaconBlock
+): RestPlainResponse {.rest, endpoint: "/eth/v2/beacon/blinded_blocks",
+   meth: MethodPost.}
+  ## https://ethereum.github.io/beacon-APIs/#/Beacon/publishBlindedBlock
+
+proc publishBlindedBlockV2*(
+    client: RestClientRef,
+    broadcast_validation: Option[BroadcastValidationType],
+    blck: ForkySignedBlindedBeaconBlock
+): Future[RestPlainResponse] {.
+   async: (raises: [CancelledError, RestEncodingError, RestDnsResolveError,
+                    RestCommunicationError], raw: true).} =
+  let consensus = typeof(blck).kind.toString()
+  client.publishBlindedBlockV2(
+    broadcast_validation,
+    blck,
+    extraHeaders = @[("eth-consensus-version", consensus)])
+
+proc publishSszBlindedBlockV2*(
+    client: RestClientRef,
+    broadcast_validation: Option[BroadcastValidationType],
+    blck: ForkySignedBlindedBeaconBlock
+): Future[RestPlainResponse] {.
+   async: (raises: [CancelledError, RestEncodingError, RestDnsResolveError,
+                    RestCommunicationError], raw: true).} =
+  let consensus = typeof(blck).kind.toString()
+  client.publishBlindedBlockV2(
+    broadcast_validation,
+    blck,
+    restContentType = $OctetStreamMediaType,
+    extraHeaders = @[("eth-consensus-version", consensus)])
 
 proc getBlockV2Plain*(block_id: BlockIdent): RestPlainResponse {.
      rest, endpoint: "/eth/v2/beacon/blocks/{block_id}",
@@ -313,6 +465,12 @@ proc getBlockAttestations*(block_id: BlockIdent
      meth: MethodGet.}
   ## https://ethereum.github.io/beacon-APIs/#/Beacon/getBlockAttestations
 
+proc getBlockAttestationsV2Plain*(block_id: BlockIdent
+                        ): RestPlainResponse {.
+     rest, endpoint: "/eth/v2/beacon/blocks/{block_id}/attestations",
+     meth: MethodGet.}
+  ## https://ethereum.github.io/beacon-APIs/?urls.primaryName=dev#/Beacon/getBlockAttestationsV2
+
 proc getPoolAttestations*(
     slot: Option[Slot],
     committee_index: Option[CommitteeIndex]
@@ -321,11 +479,36 @@ proc getPoolAttestations*(
      meth: MethodGet.}
   ## https://ethereum.github.io/beacon-APIs/#/Beacon/getPoolAttestations
 
+proc getPoolAttestationsV2Plain*(
+    slot: Option[Slot],
+    committee_index: Option[CommitteeIndex]
+              ): RestPlainResponse {.
+     rest, endpoint: "/eth/v2/beacon/pool/attestations",
+     meth: MethodGet.}
+  ## https://ethereum.github.io/beacon-APIs/?urls.primaryName=dev#/Beacon/getPoolAttestationsV2
+
 proc submitPoolAttestations*(body: seq[phase0.Attestation]):
      RestPlainResponse {.
      rest, endpoint: "/eth/v1/beacon/pool/attestations",
      meth: MethodPost.}
   ## https://ethereum.github.io/beacon-APIs/#/Beacon/submitPoolAttestations
+
+proc submitPoolAttestationsV2Plain*(
+    body: seq[ForkyAttestation]
+): RestPlainResponse {.
+     rest, endpoint: "/eth/v2/beacon/pool/attestations",
+     meth: MethodPost.}
+  ## https://ethereum.github.io/beacon-APIs/?urls.primaryName=dev#/Beacon/submitPoolAttestationsV2
+
+proc submitPoolAttestationsV2*[T: ForkyAttestation](
+    client: RestClientRef,
+    body: seq[T]
+): Future[RestPlainResponse] {.
+   async: (raises: [CancelledError, RestEncodingError, RestDnsResolveError,
+                    RestCommunicationError], raw: true).} =
+  let consensus = T.kind.toString()
+  client.submitPoolAttestationsV2Plain(
+    body, extraHeaders = @[("eth-consensus-version", consensus)])
 
 proc getPoolAttesterSlashings*(): RestResponse[GetPoolAttesterSlashingsResponse] {.
      rest, endpoint: "/eth/v1/beacon/pool/attester_slashings",
@@ -334,6 +517,18 @@ proc getPoolAttesterSlashings*(): RestResponse[GetPoolAttesterSlashingsResponse]
 
 proc submitPoolAttesterSlashings*(body: phase0.AttesterSlashing):
      RestPlainResponse {.
+     rest, endpoint: "/eth/v1/beacon/pool/attester_slashings",
+     meth: MethodPost.}
+  ## https://ethereum.github.io/beacon-APIs/#/Beacon/submitPoolAttesterSlashings
+
+proc getPoolAttesterSlashingsV2Plain*(): RestPlainResponse {.
+     rest, endpoint: "/eth/v2/beacon/pool/attester_slashings",
+     meth: MethodGet.}
+  ## https://ethereum.github.io/beacon-APIs/?urls.primaryName=dev#/Beacon/getPoolAttesterSlashingsV2
+
+proc submitPoolAttesterSlashings*(
+       body: phase0.AttesterSlashing | electra.AttesterSlashing
+     ): RestPlainResponse {.
      rest, endpoint: "/eth/v1/beacon/pool/attester_slashings",
      meth: MethodPost.}
   ## https://ethereum.github.io/beacon-APIs/#/Beacon/submitPoolAttesterSlashings
@@ -348,7 +543,9 @@ proc submitPoolProposerSlashings*(body: ProposerSlashing): RestPlainResponse {.
      meth: MethodPost.}
   ## https://ethereum.github.io/beacon-APIs/#/Beacon/submitPoolProposerSlashings
 
-proc submitPoolSyncCommitteeSignatures*(body: seq[RestSyncCommitteeMessage]): RestPlainResponse {.
+proc submitPoolSyncCommitteeSignatures*(
+       body: seq[RestSyncCommitteeMessage]
+     ): RestPlainResponse {.
      rest, endpoint: "/eth/v1/beacon/pool/sync_committees",
      meth: MethodPost.}
   ## https://ethereum.github.io/beacon-APIs/#/Beacon/submitPoolSyncCommitteeSignatures

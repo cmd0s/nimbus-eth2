@@ -11,16 +11,24 @@
 import
   unittest2,
   ../beacon_chain/beacon_chain_db,
-  ../beacon_chain/spec/[beaconstate, forks, state_transition],
-  ../beacon_chain/consensus_object_pools/blockchain_dag,
-  eth/db/kvstore,
-  # test utilies
-  ./mocking/mock_genesis,
-  ./testutil, ./testdbutil, ./testblockutil, ./teststateutil
+  ../beacon_chain/consensus_object_pools/block_dag,
+  ../beacon_chain/spec/forks,
+  ./testutil
 
 from std/algorithm import sort
 from std/sequtils import toSeq
 from snappy import encodeFramed, uncompressedLenFramed
+from ../beacon_chain/consensus_object_pools/block_pools_types import
+  ChainDAGRef
+from ../beacon_chain/consensus_object_pools/blockchain_dag import init
+from ../beacon_chain/spec/beaconstate import
+  initialize_hashed_beacon_state_from_eth1
+from ../beacon_chain/spec/state_transition import noRollback
+from ../beacon_chain/validators/validator_monitor import ValidatorMonitor
+from ./mocking/mock_genesis import mockEth1BlockHash
+from ./testblockutil import makeInitialDeposits
+from ./testdbutil import makeTestDB
+from ./teststateutil import getTestStates
 
 when isMainModule:
   import chronicles # or some random compile error happens...
@@ -46,9 +54,6 @@ proc getBellatrixStateRef(db: BeaconChainDB, root: Eth2Digest):
   if db.getState(root, res[], noRollback):
     return res
 
-from ../beacon_chain/spec/datatypes/capella import
-  BeaconStateRef, NilableBeaconStateRef
-
 proc getCapellaStateRef(db: BeaconChainDB, root: Eth2Digest):
     capella.NilableBeaconStateRef =
   # load beaconstate the way the block pool does it - into an existing instance
@@ -56,12 +61,24 @@ proc getCapellaStateRef(db: BeaconChainDB, root: Eth2Digest):
   if db.getState(root, res[], noRollback):
     return res
 
-from ../beacon_chain/spec/datatypes/deneb import TrustedSignedBeaconBlock
-
 proc getDenebStateRef(db: BeaconChainDB, root: Eth2Digest):
     deneb.NilableBeaconStateRef =
   # load beaconstate the way the block pool does it - into an existing instance
   let res = (deneb.BeaconStateRef)()
+  if db.getState(root, res[], noRollback):
+    return res
+
+proc getElectraStateRef(db: BeaconChainDB, root: Eth2Digest):
+    electra.NilableBeaconStateRef =
+  # load beaconstate the way the block pool does it - into an existing instance
+  let res = (electra.BeaconStateRef)()
+  if db.getState(root, res[], noRollback):
+    return res
+
+proc getFuluStateRef(db: BeaconChainDB, root: Eth2Digest):
+    fulu.NilableBeaconStateRef =
+  # load beaconstate the way the block pool does it - into an existence instance
+  let res = (fulu.BeaconStateRef)()
   if db.getState(root, res[], noRollback):
     return res
 
@@ -107,6 +124,13 @@ func withDigest(blck: electra.TrustedBeaconBlock):
     root: hash_tree_root(blck)
   )
 
+func withDigest(blck: fulu.TrustedBeaconBlock):
+    fulu.TrustedSignedBeaconBlock =
+  fulu.TrustedSignedBeaconBlock(
+    message: blck,
+    root: hash_tree_root(blck)
+  )
+
 proc getTestStates(consensusFork: ConsensusFork): auto =
   let
     db = makeTestDB(SLOTS_PER_EPOCH)
@@ -120,8 +144,6 @@ proc getTestStates(consensusFork: ConsensusFork): auto =
 
   testStates
 
-debugComment "add some electra states, and test electra state loading/etc"
-
 # Each set of states gets used twice, so scope them to module
 let
   testStatesPhase0    = getTestStates(ConsensusFork.Phase0)
@@ -129,11 +151,16 @@ let
   testStatesBellatrix = getTestStates(ConsensusFork.Bellatrix)
   testStatesCapella   = getTestStates(ConsensusFork.Capella)
   testStatesDeneb     = getTestStates(ConsensusFork.Deneb)
+  testStatesElectra   = getTestStates(ConsensusFork.Electra)
+  testStatesFulu      = getTestStates(ConsensusFork.Fulu)
+
 doAssert len(testStatesPhase0) > 8
 doAssert len(testStatesAltair) > 8
 doAssert len(testStatesBellatrix) > 8
 doAssert len(testStatesCapella) > 8
 doAssert len(testStatesDeneb) > 8
+doAssert len(testStatesElectra) > 8
+doAssert len(testStatesFulu) > 8
 
 suite "Beacon chain DB" & preset():
   test "empty database" & preset():
@@ -177,6 +204,7 @@ suite "Beacon chain DB" & preset():
       not db.containsBlock(root, capella.TrustedSignedBeaconBlock)
       not db.containsBlock(root, deneb.TrustedSignedBeaconBlock)
       not db.containsBlock(root, electra.TrustedSignedBeaconBlock)
+      not db.containsBlock(root, fulu.TrustedSignedBeaconBlock)
       db.getBlock(root, phase0.TrustedSignedBeaconBlock).isErr()
       not db.getBlockSSZ(root, tmp, phase0.TrustedSignedBeaconBlock)
       not db.getBlockSZ(root, tmp2, phase0.TrustedSignedBeaconBlock)
@@ -210,6 +238,7 @@ suite "Beacon chain DB" & preset():
       not db.containsBlock(root, capella.TrustedSignedBeaconBlock)
       not db.containsBlock(root, deneb.TrustedSignedBeaconBlock)
       not db.containsBlock(root, electra.TrustedSignedBeaconBlock)
+      not db.containsBlock(root, fulu.TrustedSignedBeaconBlock)
       db.getBlock(root, altair.TrustedSignedBeaconBlock).get() == signedBlock
       db.getBlockSSZ(root, tmp, altair.TrustedSignedBeaconBlock)
       db.getBlockSZ(root, tmp2, altair.TrustedSignedBeaconBlock)
@@ -226,6 +255,7 @@ suite "Beacon chain DB" & preset():
       not db.containsBlock(root, capella.TrustedSignedBeaconBlock)
       not db.containsBlock(root, deneb.TrustedSignedBeaconBlock)
       not db.containsBlock(root, electra.TrustedSignedBeaconBlock)
+      not db.containsBlock(root, fulu.TrustedSignedBeaconBlock)
       db.getBlock(root, altair.TrustedSignedBeaconBlock).isErr()
       not db.getBlockSSZ(root, tmp, altair.TrustedSignedBeaconBlock)
       not db.getBlockSZ(root, tmp2, altair.TrustedSignedBeaconBlock)
@@ -259,6 +289,7 @@ suite "Beacon chain DB" & preset():
       not db.containsBlock(root, capella.TrustedSignedBeaconBlock)
       not db.containsBlock(root, deneb.TrustedSignedBeaconBlock)
       not db.containsBlock(root, electra.TrustedSignedBeaconBlock)
+      not db.containsBlock(root, fulu.TrustedSignedBeaconBlock)
       db.getBlock(root, bellatrix.TrustedSignedBeaconBlock).get() == signedBlock
       db.getBlockSSZ(root, tmp, bellatrix.TrustedSignedBeaconBlock)
       db.getBlockSZ(root, tmp2, bellatrix.TrustedSignedBeaconBlock)
@@ -275,6 +306,7 @@ suite "Beacon chain DB" & preset():
       not db.containsBlock(root, capella.TrustedSignedBeaconBlock)
       not db.containsBlock(root, deneb.TrustedSignedBeaconBlock)
       not db.containsBlock(root, electra.TrustedSignedBeaconBlock)
+      not db.containsBlock(root, fulu.TrustedSignedBeaconBlock)
       db.getBlock(root, bellatrix.TrustedSignedBeaconBlock).isErr()
       not db.getBlockSSZ(root, tmp, bellatrix.TrustedSignedBeaconBlock)
       not db.getBlockSZ(root, tmp2, bellatrix.TrustedSignedBeaconBlock)
@@ -307,6 +339,7 @@ suite "Beacon chain DB" & preset():
       not db.containsBlock(root, bellatrix.TrustedSignedBeaconBlock)
       not db.containsBlock(root, deneb.TrustedSignedBeaconBlock)
       not db.containsBlock(root, electra.TrustedSignedBeaconBlock)
+      not db.containsBlock(root, fulu.TrustedSignedBeaconBlock)
       db.containsBlock(root, capella.TrustedSignedBeaconBlock)
       db.getBlock(root, capella.TrustedSignedBeaconBlock).get() == signedBlock
       db.getBlockSSZ(root, tmp, capella.TrustedSignedBeaconBlock)
@@ -324,6 +357,7 @@ suite "Beacon chain DB" & preset():
       not db.containsBlock(root, capella.TrustedSignedBeaconBlock)
       not db.containsBlock(root, deneb.TrustedSignedBeaconBlock)
       not db.containsBlock(root, electra.TrustedSignedBeaconBlock)
+      not db.containsBlock(root, fulu.TrustedSignedBeaconBlock)
       db.getBlock(root, capella.TrustedSignedBeaconBlock).isErr()
       not db.getBlockSSZ(root, tmp, capella.TrustedSignedBeaconBlock)
       not db.getBlockSZ(root, tmp2, capella.TrustedSignedBeaconBlock)
@@ -357,6 +391,7 @@ suite "Beacon chain DB" & preset():
       not db.containsBlock(root, capella.TrustedSignedBeaconBlock)
       db.containsBlock(root, deneb.TrustedSignedBeaconBlock)
       not db.containsBlock(root, electra.TrustedSignedBeaconBlock)
+      not db.containsBlock(root, fulu.TrustedSignedBeaconBlock)
       db.getBlock(root, deneb.TrustedSignedBeaconBlock).get() == signedBlock
       db.getBlockSSZ(root, tmp, deneb.TrustedSignedBeaconBlock)
       db.getBlockSZ(root, tmp2, deneb.TrustedSignedBeaconBlock)
@@ -425,6 +460,57 @@ suite "Beacon chain DB" & preset():
       db.getBlock(root, electra.TrustedSignedBeaconBlock).isErr()
       not db.getBlockSSZ(root, tmp, electra.TrustedSignedBeaconBlock)
       not db.getBlockSZ(root, tmp2, electra.TrustedSignedBeaconBlock)
+
+    db.putStateRoot(root, signedBlock.message.slot, root)
+    var root2 = root
+    root2.data[0] = root.data[0] + 1
+    db.putStateRoot(root, signedBlock.message.slot + 1, root2)
+
+    check:
+      db.getStateRoot(root, signedBlock.message.slot).get() == root
+      db.getStateRoot(root, signedBlock.message.slot + 1).get() == root2
+
+    db.close()
+
+  test "sanity check Fulu blocks" & preset():
+    let db = BeaconChainDB.new("", inMemory = true)
+
+    let
+      signedBlock = withDigest((fulu.TrustedBeaconBlock)())
+      root = hash_tree_root(signedBlock.message)
+
+    db.putBlock(signedBlock)
+
+    var tmp, tmp2: seq[byte]
+    check:
+      db.containsBlock(root)
+      not db.containsBlock(root, phase0.TrustedSignedBeaconBlock)
+      not db.containsBlock(root, altair.TrustedSignedBeaconBlock)
+      not db.containsBlock(root, bellatrix.TrustedSignedBeaconBlock)
+      not db.containsBlock(root, capella.TrustedSignedBeaconBlock)
+      not db.containsBlock(root, deneb.TrustedSignedBeaconBlock)
+      not db.containsBlock(root, electra.TrustedSignedBeaconBlock)
+      db.containsBlock(root, fulu.TrustedSignedBeaconBlock)
+      db.getBlock(root, fulu.TrustedSignedBeaconBlock).get() == signedBlock
+      db.getBlockSSZ(root, tmp, fulu.TrustedSignedBeaconBlock)
+      db.getBlockSZ(root, tmp2, fulu.TrustedSignedBeaconBlock)
+      tmp == SSZ.encode(signedBlock)
+      tmp2 == encodeFramed(tmp)
+      uncompressedLenFramed(tmp2).isSome
+
+    check:
+      db.delBlock(ConsensusFork.Fulu, root)
+      not db.containsBlock(root)
+      not db.containsBlock(root, phase0.TrustedSignedBeaconBlock)
+      not db.containsBlock(root, altair.TrustedSignedBeaconBlock)
+      not db.containsBlock(root, bellatrix.TrustedSignedBeaconBlock)
+      not db.containsBlock(root, capella.TrustedSignedBeaconBlock)
+      not db.containsBlock(root, deneb.TrustedSignedBeaconBlock)
+      not db.containsBlock(root, electra.TrustedSignedBeaconBlock)
+      not db.containsBlock(root, fulu.TrustedSignedBeaconBlock)
+      db.getBlock(root, fulu.TrustedSignedBeaconBlock).isErr()
+      not db.getBlockSSZ(root, tmp, fulu.TrustedSignedBeaconBlock)
+      not db.getBlockSZ(root, tmp2, fulu.TrustedSignedBeaconBlock)
 
     db.putStateRoot(root, signedBlock.message.slot, root)
     var root2 = root
@@ -527,6 +613,42 @@ suite "Beacon chain DB" & preset():
 
     db.close()
 
+  test "sanity check Electra states" & preset():
+    let db = makeTestDB(SLOTS_PER_EPOCH)
+
+    for state in testStatesElectra:
+      let root = state[].electraData.root
+      db.putState(root, state[].electraData.data)
+
+      check:
+        db.containsState(root)
+        hash_tree_root(db.getElectraStateRef(root)[]) == root
+
+      db.delState(ConsensusFork.Electra, root)
+      check:
+        not db.containsState(root)
+        db.getElectraStateRef(root).isNil
+
+    db.close()
+
+  test "sanity check Fulu states" & preset():
+    let db = makeTestDB(SLOTS_PER_EPOCH)
+
+    for state in testStatesFulu:
+      let root = state[].fuluData.root
+      db.putState(root, state[].fuluData.data)
+
+      check:
+        db.containsState(root)
+        hash_tree_root(db.getFuluStateRef(root)[]) == root
+
+      db.delState(ConsensusFork.Fulu, root)
+      check:
+        not db.containsState(root)
+        db.getFuluStateRef(root).isNil
+
+    db.close()
+
   test "sanity check phase 0 states, reusing buffers" & preset():
     let db = makeTestDB(SLOTS_PER_EPOCH)
     let stateBuffer = (phase0.BeaconStateRef)()
@@ -621,6 +743,46 @@ suite "Beacon chain DB" & preset():
         hash_tree_root(stateBuffer[]) == root
 
       db.delState(ConsensusFork.Deneb, root)
+      check:
+        not db.containsState(root)
+        not db.getState(root, stateBuffer[], noRollback)
+
+    db.close()
+
+  test "sanity check Electra states, reusing buffers" & preset():
+    let db = makeTestDB(SLOTS_PER_EPOCH)
+    let stateBuffer = (electra.BeaconStateRef)()
+
+    for state in testStatesElectra:
+      let root = state[].electraData.root
+      db.putState(root, state[].electraData.data)
+
+      check:
+        db.getState(root, stateBuffer[], noRollback)
+        db.containsState(root)
+        hash_tree_root(stateBuffer[]) == root
+
+      db.delState(ConsensusFork.Electra, root)
+      check:
+        not db.containsState(root)
+        not db.getState(root, stateBuffer[], noRollback)
+
+    db.close()
+
+  test "sanity check Fulu states, reusing buffers" & preset():
+    let db = makeTestDB(SLOTS_PER_EPOCH)
+    let stateBuffer = (fulu.BeaconStateRef)()
+
+    for state in testStatesFulu:
+      let root = state[].fuluData.root
+      db.putState(root, state[].fuluData.data)
+
+      check:
+        db.getState(root, stateBuffer[], noRollback)
+        db.containsState(root)
+        hash_tree_root(stateBuffer[]) == root
+
+      db.delState(ConsensusFork.Fulu, root)
       check:
         not db.containsState(root)
         not db.getState(root, stateBuffer[], noRollback)
@@ -754,9 +916,60 @@ suite "Beacon chain DB" & preset():
       state[].kind == ConsensusFork.Phase0
       state[].phase0Data.data.slot != 10.Slot
 
-  test "find ancestors" & preset():
+  test "sanity check Electra and cross-fork getState rollback" & preset():
     var
-      db = BeaconChainDB.new("", inMemory = true)
+      db = makeTestDB(SLOTS_PER_EPOCH)
+      validatorMonitor = newClone(ValidatorMonitor.init())
+      dag = init(ChainDAGRef, defaultRuntimeConfig, db, validatorMonitor, {})
+      state = (ref ForkedHashedBeaconState)(
+        kind: ConsensusFork.Electra,
+        electraData: electra.HashedBeaconState(data: electra.BeaconState(
+          slot: 10.Slot)))
+      root = Eth2Digest()
+
+    db.putCorruptState(ConsensusFork.Electra, root)
+
+    let restoreAddr = addr dag.headState
+
+    func restore() =
+      assign(state[], restoreAddr[])
+
+    check:
+      state[].electraData.data.slot == 10.Slot
+      not db.getState(root, state[].electraData.data, restore)
+
+      # assign() has switched the case object fork
+      state[].kind == ConsensusFork.Phase0
+      state[].phase0Data.data.slot != 10.Slot
+
+  test "sanity check Fulu and cross-fork getState rollback" & preset():
+    var
+      db = makeTestDB(SLOTS_PER_EPOCH)
+      validatorMonitor = newClone(ValidatorMonitor.init())
+      dag = init(ChainDAGRef, defaultRuntimeConfig, db, validatorMonitor, {})
+      state = (ref ForkedHashedBeaconState)(
+        kind: ConsensusFork.Fulu,
+        fuluData: fulu.HashedBeaconState(data: fulu.BeaconState(
+          slot: 10.Slot)))
+      root = Eth2Digest()
+
+    db.putCorruptState(ConsensusFork.Fulu, root)
+
+    let restoreAddr = addr dag.headState
+
+    func restore() =
+      assign(state[], restoreAddr[])
+
+    check:
+      state[].fuluData.data.slot == 10.Slot
+      not db.getState(root, state[].fuluData.data, restore)
+
+      # assign() has switched the case object fork
+      state[].kind == ConsensusFork.Phase0
+      state[].phase0Data.data.slot != 10.Slot
+
+  test "find ancestors" & preset():
+    var db = BeaconChainDB.new("", inMemory = true)
 
     let
       a0 = withDigest(
@@ -791,8 +1004,7 @@ suite "Beacon chain DB" & preset():
     # state. We've been bit by this because we've had a bug in the BLS
     # serialization where an all-zero default-initialized bls signature could
     # not be deserialized because the deserialization was too strict.
-    var
-      db = BeaconChainDB.new("", inMemory = true)
+    var db = BeaconChainDB.new("", inMemory = true)
 
     let
       state = newClone(initialize_hashed_beacon_state_from_eth1(
@@ -811,8 +1023,7 @@ suite "Beacon chain DB" & preset():
       hash_tree_root(state2[]) == state[].root
 
   test "sanity check state diff roundtrip" & preset():
-    var
-      db = BeaconChainDB.new("", inMemory = true)
+    var db = BeaconChainDB.new("", inMemory = true)
 
     # TODO htr(diff) probably not interesting/useful, but stand-in
     let
@@ -926,6 +1137,106 @@ suite "Beacon chain DB" & preset():
       not db.getBlobSidecarSZ(blockRoot0, 3, buf)
       not db.getBlobSidecarSZ(blockRoot0, 2, buf)
       not db.getBlobSidecarSZ(blockRoot1, 2, buf)
+
+    db.close()
+
+  test "sanity check data columns" & preset():
+    const
+      blockHeader0 = SignedBeaconBlockHeader(
+        message: BeaconBlockHeader(slot: Slot(0)))
+      blockHeader1 = SignedBeaconBlockHeader(
+        message: BeaconBlockHeader(slot: Slot(1)))
+
+    let
+      blockRoot0 = hash_tree_root(blockHeader0.message)
+      blockRoot1 = hash_tree_root(blockHeader1.message)
+
+      # Ensure minimal-difference pairs on both block root and 
+      # data column index to verify that the columnkey uses both
+      dataColumnSidecar0 = DataColumnSidecar(signed_block_header: blockHeader0, index: 3)
+      dataColumnSidecar1 = DataColumnSidecar(signed_block_header: blockHeader0, index: 2)
+      dataColumnSidecar2 = DataColumnSidecar(signed_block_header: blockHeader1, index: 2)
+
+      db = makeTestDB(SLOTS_PER_EPOCH)
+
+    var
+      buf: seq[byte]
+      dataColumnSidecar: DataColumnSidecar
+
+    check:
+      not db.getDataColumnSidecar(blockRoot0, 3, dataColumnSidecar)
+      not db.getDataColumnSidecar(blockRoot0, 2, dataColumnSidecar)
+      not db.getDataColumnSidecar(blockRoot1, 2, dataColumnSidecar)
+      not db.getDataColumnSidecarSZ(blockRoot0, 3, buf)
+      not db.getDataColumnSidecarSZ(blockRoot0, 3, buf)
+      not db.getDataColumnSidecarSZ(blockRoot1, 2, buf)
+
+    db.putDataColumnSidecar(dataColumnSidecar0)
+    
+    check:
+      db.getDataColumnSidecar(blockRoot0, 3, dataColumnSidecar)
+      dataColumnSidecar == dataColumnSidecar0
+      not db.getDataColumnSidecar(blockRoot0, 2, dataColumnSidecar)
+      not db.getDataColumnSidecar(blockRoot1, 2, dataColumnSidecar)
+      db.getDataColumnSidecarSZ(blockRoot0, 3, buf)
+      not db.getDataColumnSidecarSZ(blockRoot0, 2, buf)
+      not db.getDataColumnSidecarSZ(blockRoot1, 2, buf)
+
+    db.putDataColumnSidecar(dataColumnSidecar1)
+
+    check:
+      db.getDataColumnSidecar(blockRoot0, 3, dataColumnSidecar)
+      dataColumnSidecar == dataColumnSidecar0
+      db.getDataColumnSidecar(blockRoot0, 2, dataColumnSidecar)
+      dataColumnSidecar == dataColumnSidecar1
+      not db.getDataColumnSidecar(blockRoot1, 2, dataColumnSidecar)
+      db.getDataColumnSidecarSZ(blockRoot0, 3, buf)
+      db.getDataColumnSidecarSZ(blockRoot0, 2, buf)
+      not db.getDataColumnSidecarSZ(blockRoot1, 2, buf)
+
+    check db.delDataColumnSidecar(blockRoot0, 3)
+
+    check:
+      not db.getDataColumnSidecar(blockRoot0, 3, dataColumnSidecar)
+      db.getDataColumnSidecar(blockRoot0, 2, dataColumnSidecar)
+      dataColumnSidecar == dataColumnSidecar1
+      not db.getDataColumnSidecar(blockRoot1, 2, dataColumnSidecar)
+      not db.getDataColumnSidecarSZ(blockRoot0, 3, buf)
+      db.getDataColumnSidecarSZ(blockRoot0, 2, buf)
+      not db.getDataColumnSidecarSZ(blockRoot1, 2, buf)
+
+    db.putDataColumnSidecar(dataColumnSidecar2)
+
+    check:
+      not db.getDataColumnSidecar(blockRoot0, 3, dataColumnSidecar)
+      db.getDataColumnSidecar(blockRoot0, 2, dataColumnSidecar)
+      dataColumnSidecar == dataColumnSidecar1
+      db.getDataColumnSidecar(blockRoot1, 2, dataColumnSidecar)
+      dataColumnSidecar == dataColumnSidecar2
+      not db.getDataColumnSidecarSZ(blockRoot0, 3, buf)
+      db.getDataColumnSidecarSZ(blockRoot0, 2, buf)
+      db.getDataColumnSidecarSZ(blockRoot1, 2, buf)
+
+    check db.delDataColumnSidecar(blockRoot0, 2)
+
+    check:
+      not db.getDataColumnSidecar(blockRoot0, 3, dataColumnSidecar)
+      not db.getDataColumnSidecar(blockRoot0, 2, dataColumnSidecar)
+      db.getDataColumnSidecar(blockRoot1, 2, dataColumnSidecar)
+      dataColumnSidecar == dataColumnSidecar2
+      not db.getDataColumnSidecarSZ(blockRoot0, 3, buf)
+      not db.getDataColumnSidecarSZ(blockRoot0, 2, buf)
+      db.getDataColumnSidecarSZ(blockRoot1, 2, buf)
+
+    check db.delDataColumnSidecar(blockRoot1, 2)
+
+    check:
+      not db.getDataColumnSidecar(blockRoot0, 3, dataColumnSidecar)
+      not db.getDataColumnSidecar(blockRoot0, 2, dataColumnSidecar)
+      not db.getDataColumnSidecar(blockRoot1, 2, dataColumnSidecar)
+      not db.getDataColumnSidecarSZ(blockRoot0, 3, buf)
+      not db.getDataColumnSidecarSZ(blockRoot0, 2, buf)
+      not db.getDataColumnSidecarSZ(blockRoot1, 2, buf)
 
     db.close()
 

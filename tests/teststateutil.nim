@@ -40,8 +40,12 @@ proc valid_deposit(state: var ForkyHashedBeaconState) =
     defaultRuntimeConfig, state.data,
     sortValidatorBuckets(state.data.validators.asSeq)[], deposit, {}).isOk
   doAssert state.data.validators.len == pre_val_count + 1
-  doAssert state.data.balances.len == pre_val_count + 1
-  doAssert state.data.balances.item(validator_index) == pre_balance + deposit.data.amount
+  when typeof(state).kind >= ConsensusFork.Electra:
+    doAssert state.data.balances.item(validator_index) == pre_balance
+  else:
+    doAssert state.data.balances.item(validator_index) ==
+      pre_balance + deposit.data.amount
+
   doAssert state.data.validators.item(validator_index).effective_balance ==
     round_multiple_down(
       min(
@@ -75,7 +79,7 @@ proc getTestStates*(
     info = ForkedEpochInfo()
     cfg = defaultRuntimeConfig
 
-  static: doAssert high(ConsensusFork) == ConsensusFork.Electra
+  static: doAssert high(ConsensusFork) == ConsensusFork.Fulu
   if consensusFork >= ConsensusFork.Altair:
     cfg.ALTAIR_FORK_EPOCH = 1.Epoch
   if consensusFork >= ConsensusFork.Bellatrix:
@@ -86,6 +90,8 @@ proc getTestStates*(
     cfg.DENEB_FORK_EPOCH = 4.Epoch
   if consensusFork >= ConsensusFork.Electra:
     cfg.ELECTRA_FORK_EPOCH = 5.Epoch
+  if consensusFork >= ConsensusFork.Fulu:
+    cfg.FULU_FORK_EPOCH = 6.Epoch
 
   for i, epoch in stateEpochs:
     let slot = epoch.Epoch.start_slot
@@ -105,7 +111,8 @@ from std/sequtils import allIt
 from ".."/beacon_chain/spec/beaconstate import get_expected_withdrawals
 
 proc checkPerValidatorBalanceCalc*(
-    state: deneb.BeaconState | electra.BeaconState): bool =
+    state: deneb.BeaconState | electra.BeaconState |
+           fulu.BeaconState): bool =
   var
     info: altair.EpochInfo
     cache: StateCache

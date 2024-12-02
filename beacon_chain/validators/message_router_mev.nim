@@ -32,7 +32,6 @@ macro copyFields*(
     dst: untyped, src: untyped, fieldNames: static[seq[string]]): untyped =
   result = newStmtList()
   for name in fieldNames:
-    debugComment "deposit_receipts_root and exits_root are not currently filled in anywhere properly, so blinded electra proposals will fail"
     if name notin [
         # These fields are the ones which vary between the blinded and
         # unblinded objects, and can't simply be copied.
@@ -48,7 +47,8 @@ proc unblindAndRouteBlockMEV*(
     node: BeaconNode, payloadBuilderRestClient: RestClientRef,
     blindedBlock:
       deneb_mev.SignedBlindedBeaconBlock |
-      electra_mev.SignedBlindedBeaconBlock):
+      electra_mev.SignedBlindedBeaconBlock |
+      fulu_mev.SignedBlindedBeaconBlock):
     Future[Result[Opt[BlockRef], string]] {.async: (raises: [CancelledError]).} =
   const consensusFork = typeof(blindedBlock).kind
 
@@ -92,6 +92,9 @@ proc unblindAndRouteBlockMEV*(
   elif blindedBlock is electra_mev.SignedBlindedBeaconBlock:
     let res = decodeBytes(
       SubmitBlindedBlockResponseElectra, response.data, response.contentType)
+  elif blindedBlock is fulu_mev.SignedBlindedBeaconBlock:
+    let res = decodeBytes(
+      SubmitBlindedBlockResponseFulu, response.data, response.contentType)
   else:
     static: doAssert false
 

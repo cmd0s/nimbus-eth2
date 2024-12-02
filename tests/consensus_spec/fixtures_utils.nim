@@ -47,6 +47,13 @@ func readValue*(r: var JsonReader, a: var seq[byte]) =
 func genesisTestRuntimeConfig*(consensusFork: ConsensusFork): RuntimeConfig =
   var res = defaultRuntimeConfig
   case consensusFork
+  of ConsensusFork.Fulu:
+    res.FULU_FORK_EPOCH = GENESIS_EPOCH
+    res.ELECTRA_FORK_EPOCH = GENESIS_EPOCH
+    res.DENEB_FORK_EPOCH = GENESIS_EPOCH
+    res.CAPELLA_FORK_EPOCH = GENESIS_EPOCH
+    res.BELLATRIX_FORK_EPOCH = GENESIS_EPOCH
+    res.ALTAIR_FORK_EPOCH = GENESIS_EPOCH
   of ConsensusFork.Electra:
     res.ELECTRA_FORK_EPOCH = GENESIS_EPOCH
     res.DENEB_FORK_EPOCH = GENESIS_EPOCH
@@ -83,7 +90,7 @@ type
     rewards*: List[Gwei, Limit VALIDATOR_REGISTRY_LIMIT]
     penalties*: List[Gwei, Limit VALIDATOR_REGISTRY_LIMIT]
 
-  # https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.6/specs/phase0/validator.md#eth1block
+  # https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.9/specs/phase0/validator.md#eth1block
   Eth1Block* = object
     timestamp*: uint64
     deposit_root*: Eth2Digest
@@ -94,7 +101,7 @@ const
   FixturesDir* =
     currentSourcePath.rsplit(DirSep, 1)[0] / ".." / ".." / "vendor" / "nim-eth2-scenarios"
   SszTestsDir* = FixturesDir / "tests-v" & SPEC_VERSION
-  MaxObjectSize* = 3_000_000
+  MaxObjectSize* = 10_000_000
 
 proc relativeTestPathComponent*(path: string, suitePath = SszTestsDir): string =
   try:

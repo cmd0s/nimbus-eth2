@@ -153,6 +153,7 @@ type
     capellaIndex*: Option[GeneralizedIndex]
     denebIndex*: Option[GeneralizedIndex]
     electraIndex*: Option[GeneralizedIndex]
+    fuluIndex*: Option[GeneralizedIndex]
 
   KeystoreData* = object
     version*: uint64
@@ -726,17 +727,20 @@ template writeValue*(w: var JsonWriter,
 
 func parseProvenBlockProperty*(propertyPath: string): Result[ProvenProperty, string] =
   if propertyPath == ".execution_payload.fee_recipient":
+    debugFuluComment "We don't know yet if `GeneralizedIndex` will stay same in Fulu yet."
     ok ProvenProperty(
       path: propertyPath,
       capellaIndex: some GeneralizedIndex(401),
       denebIndex: some GeneralizedIndex(801),
-      electraIndex: some GeneralizedIndex(801))
+      electraIndex: some GeneralizedIndex(801),
+      fuluIndex: some GeneralizedIndex(801))
   elif propertyPath == ".graffiti":
     ok ProvenProperty(
       path: propertyPath,
       capellaIndex: some GeneralizedIndex(18),
       denebIndex: some GeneralizedIndex(18),
-      electraIndex: some GeneralizedIndex(18))
+      electraIndex: some GeneralizedIndex(18),
+      fuluIndex: some GeneralizedIndex(18))
   else:
     err("Keystores with proven properties different than " &
         "`.execution_payload.fee_recipient` and `.graffiti` " &
@@ -846,10 +850,12 @@ proc readValue*(reader: var JsonReader, value: var RemoteKeystore)
           prop.capellaIndex = some GeneralizedIndex(401)
           prop.denebIndex = some GeneralizedIndex(801)
           prop.electraIndex = some GeneralizedIndex(801)
+          prop.fuluIndex = some GeneralizedIndex(801)
         elif prop.path == ".graffiti":
           prop.capellaIndex = some GeneralizedIndex(18)
           prop.denebIndex = some GeneralizedIndex(18)
           prop.electraIndex = some GeneralizedIndex(801)
+          prop.fuluIndex = some GeneralizedIndex(801)
         else:
           reader.raiseUnexpectedValue("Keystores with proven properties different than " &
                                       "`.execution_payload.fee_recipient` and `.graffiti` " &
@@ -1380,13 +1386,13 @@ proc createWallet*(kdfKind: KdfKind,
     crypto: crypto,
     nextAccount: nextAccount.get(0))
 
-# https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.6/specs/phase0/validator.md#bls_withdrawal_prefix
+# https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.9/specs/phase0/validator.md#bls_withdrawal_prefix
 func makeWithdrawalCredentials*(k: ValidatorPubKey): Eth2Digest =
   var bytes = eth2digest(k.toRaw())
   bytes.data[0] = BLS_WITHDRAWAL_PREFIX.uint8
   bytes
 
-# https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.6/specs/phase0/deposit-contract.md#withdrawal-credentials
+# https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.9/specs/phase0/deposit-contract.md#withdrawal-credentials
 func makeWithdrawalCredentials*(k: CookedPubKey): Eth2Digest =
   makeWithdrawalCredentials(k.toPubKey())
 
