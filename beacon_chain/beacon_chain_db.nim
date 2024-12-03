@@ -20,7 +20,6 @@ import
           forks,
           presets,
           state_transition],
-  ./spec/datatypes/[phase0, altair, bellatrix],
   "."/[beacon_chain_db_light_client, filepath]
 
 from ./spec/datatypes/capella import BeaconState
@@ -115,6 +114,8 @@ type
     blocks: array[ConsensusFork, KvStoreRef] # BlockRoot -> TrustedSignedBeaconBlock
 
     blobs: array[BlobFork, KvStoreRef] # (BlockRoot -> BlobSidecar)
+
+    columns: KvStoreRef # (BlockRoot -> DataColumnSidecar)
 
     stateRoots: KvStoreRef # (Slot, BlockRoot) -> StateRoot
 
@@ -248,6 +249,13 @@ func subkey(root: Eth2Digest, slot: Slot): array[40, byte] =
   ret
 
 func blobkey(root: Eth2Digest, index: BlobIndex) : array[40, byte] =
+  var ret: array[40, byte]
+  ret[0..<8] = toBytes(index)
+  ret[8..<40] = root.data
+
+  ret
+
+func columnkey(root: Eth2Digest, index: ColumnIndex) : array[40, byte] =
   var ret: array[40, byte]
   ret[0..<8] = toBytes(index)
   ret[8..<40] = root.data
@@ -508,23 +516,43 @@ proc new*(T: type BeaconChainDB,
 
     # V1 - expected-to-be small rows get without rowid optimizations
     keyValues = kvStore db.openKvStore("key_values", true).expectDb()
-    blocks = [
+    blocks = if cfg.FULU_FORK_EPOCH != FAR_FUTURE_EPOCH: [
       kvStore db.openKvStore("blocks").expectDb(),
       kvStore db.openKvStore("altair_blocks").expectDb(),
       kvStore db.openKvStore("bellatrix_blocks").expectDb(),
       kvStore db.openKvStore("capella_blocks").expectDb(),
       kvStore db.openKvStore("deneb_blocks").expectDb(),
-      kvStore db.openKvStore("electra_blocks").expectDb()]
+      kvStore db.openKvStore("electra_blocks").expectDb(),
+      kvStore db.openKvStore("fulu_blocks").expectDb()]
+
+      else: [
+      kvStore db.openKvStore("blocks").expectDb(),
+      kvStore db.openKvStore("altair_blocks").expectDb(),
+      kvStore db.openKvStore("bellatrix_blocks").expectDb(),
+      kvStore db.openKvStore("capella_blocks").expectDb(),
+      kvStore db.openKvStore("deneb_blocks").expectDb(),
+      kvStore db.openKvStore("electra_blocks").expectDb(),
+      kvStore db.openKvStore("").expectDb()]
 
     stateRoots = kvStore db.openKvStore("state_roots", true).expectDb()
 
-    statesNoVal = [
-      kvStore db.openKvStore("state_no_validators2").expectDb(),
-      kvStore db.openKvStore("altair_state_no_validators").expectDb(),
-      kvStore db.openKvStore("bellatrix_state_no_validators").expectDb(),
-      kvStore db.openKvStore("capella_state_no_validator_pubkeys").expectDb(),
-      kvStore db.openKvStore("deneb_state_no_validator_pubkeys").expectDb(),
-      kvStore db.openKvStore("electra_state_no_validator_pubkeys").expectDb()]
+    statesNoVal = if cfg.FULU_FORK_EPOCH != FAR_FUTURE_EPOCH: [
+        kvStore db.openKvStore("state_no_validators").expectDb(),
+        kvStore db.openKvStore("altair_state_no_validators").expectDb(),
+        kvStore db.openKvStore("bellatrix_state_no_validators").expectDb(),
+        kvStore db.openKvStore("capella_state_no_validator_pubkeys").expectDb(),
+        kvStore db.openKvStore("deneb_state_no_validator_pubkeys").expectDb(),
+        kvStore db.openKvStore("electra_state_no_validator_pubkeys").expectDb(),
+        kvStore db.openKvStore("fulu_state_no_validator_pubkeys").expectDb()]
+
+      else: [
+        kvStore db.openKvStore("state_no_validators").expectDb(),
+        kvStore db.openKvStore("altair_state_no_validators").expectDb(),
+        kvStore db.openKvStore("bellatrix_state_no_validators").expectDb(),
+        kvStore db.openKvStore("capella_state_no_validator_pubkeys").expectDb(),
+        kvStore db.openKvStore("deneb_state_no_validator_pubkeys").expectDb(),
+        kvStore db.openKvStore("electra_state_no_validator_pubkeys").expectDb(),
+        kvStore db.openKvStore("").expectDb()]
 
     stateDiffs = kvStore db.openKvStore("state_diffs").expectDb()
     summaries = kvStore db.openKvStore("beacon_block_summaries", true).expectDb()
@@ -563,6 +591,10 @@ proc new*(T: type BeaconChainDB,
   blobs[BlobFork.Deneb] = kvStore db.openKvStore("deneb_blobs").expectDb()
   static: doAssert BlobFork.high == BlobFork.Deneb
 
+  var columns: KvStoreRef
+  if cfg.FULU_FORK_EPOCH != FAR_FUTURE_EPOCH:
+    columns = kvStore db.openKvStore("fulu_columns").expectDb()
+
   # Versions prior to 1.4.0 (altair) stored validators in `immutable_validators`
   # which stores validator keys in compressed format - this is
   # slow to load and has been superceded by `immutable_validators2` which uses
@@ -598,6 +630,7 @@ proc new*(T: type BeaconChainDB,
     keyValues: keyValues,
     blocks: blocks,
     blobs: blobs,
+    columns: columns,
     stateRoots: stateRoots,
     statesNoVal: statesNoVal,
     stateDiffs: stateDiffs,
@@ -765,6 +798,8 @@ proc close*(db: BeaconChainDB) =
   if db.db == nil: return
 
   # Close things roughly in reverse order
+  if not isNil(db.columns):
+    discard db.columns.close()
   for blobFork in BlobFork:
     if not isNil(db.blobs[blobFork]):
       discard db.blobs[blobFork].close()
@@ -808,7 +843,7 @@ proc putBlock*(
     db: BeaconChainDB,
     value: bellatrix.TrustedSignedBeaconBlock |
            capella.TrustedSignedBeaconBlock | deneb.TrustedSignedBeaconBlock |
-           electra.TrustedSignedBeaconBlock) =
+           electra.TrustedSignedBeaconBlock | fulu.TrustedSignedBeaconBlock) =
   db.withManyWrites:
     db.blocks[type(value).kind].putSZSSZ(value.root.data, value)
     db.putBeaconBlockSummary(value.root, value.message.toBeaconBlockSummary())
@@ -827,6 +862,17 @@ proc delBlobSidecar*(
     if db.blobs[blobFork].del(blobkey(root, index)).expectDb():
       res = true
   res
+
+proc putDataColumnSidecar*(
+    db: BeaconChainDB,
+    value: DataColumnSidecar) =
+  let block_root = hash_tree_root(value.signed_block_header.message)
+  db.columns.putSZSSZ(columnkey(block_root, value.index), value)
+
+proc delDataColumnSidecar*(
+    db: BeaconChainDB,
+    root: Eth2Digest, index: ColumnIndex): bool =
+  db.columns.del(columnkey(root, index)).expectDb()
 
 proc updateImmutableValidators*(
     db: BeaconChainDB, validators: openArray[Validator]) =
@@ -866,6 +912,10 @@ template toBeaconStateNoImmutableValidators(state: electra.BeaconState):
     ElectraBeaconStateNoImmutableValidators =
   isomorphicCast[ElectraBeaconStateNoImmutableValidators](state)
 
+template toBeaconStateNoImmutableValidators(state: fulu.BeaconState):
+    FuluBeaconStateNoImmutableValidators =
+  isomorphicCast[FuluBeaconStateNoImmutableValidators](state)
+
 proc putState*(
     db: BeaconChainDB, key: Eth2Digest,
     value: phase0.BeaconState | altair.BeaconState) =
@@ -876,7 +926,7 @@ proc putState*(
 proc putState*(
     db: BeaconChainDB, key: Eth2Digest,
     value: bellatrix.BeaconState | capella.BeaconState | deneb.BeaconState |
-           electra.BeaconState) =
+           electra.BeaconState | fulu.BeaconState) =
   db.updateImmutableValidators(value.validators.asSeq())
   db.statesNoVal[type(value).kind].putSZSSZ(
     key.data, toBeaconStateNoImmutableValidators(value))
@@ -1005,7 +1055,8 @@ proc getBlock*(
 
 proc getBlock*[
     X: bellatrix.TrustedSignedBeaconBlock | capella.TrustedSignedBeaconBlock |
-       deneb.TrustedSignedBeaconBlock | electra.TrustedSignedBeaconBlock](
+       deneb.TrustedSignedBeaconBlock | electra.TrustedSignedBeaconBlock |
+       fulu.TrustedSignedBeaconBlock](
     db: BeaconChainDB, key: Eth2Digest,
     T: type X): Opt[T] =
   # We only store blocks that we trust in the database
@@ -1060,7 +1111,8 @@ proc getBlockSSZ*(
 
 proc getBlockSSZ*[
     X: bellatrix.TrustedSignedBeaconBlock | capella.TrustedSignedBeaconBlock |
-       deneb.TrustedSignedBeaconBlock | electra.TrustedSignedBeaconBlock](
+       deneb.TrustedSignedBeaconBlock | electra.TrustedSignedBeaconBlock |
+       fulu.TrustedSignedBeaconBlock](
     db: BeaconChainDB, key: Eth2Digest, data: var seq[byte], T: type X): bool =
   let dataPtr = addr data # Short-lived
   var success = true
@@ -1090,6 +1142,17 @@ proc getBlobSidecar*[T: ForkyBlobSidecar](
   if db.blobs[T.kind] == nil: return false
   db.blobs[T.kind].getSZSSZ(blobkey(root, index), value) == GetResult.found
 
+proc getDataColumnSidecarSZ*(db: BeaconChainDB, root: Eth2Digest,
+                             index: ColumnIndex, data: var seq[byte]): bool =
+  let dataPtr = addr data # Short-lived
+  func decode(data: openArray[byte]) =
+    assign(dataPtr[], data)
+  db.columns.get(columnkey(root, index), decode).expectDb()
+
+proc getDataColumnSidecar*(db: BeaconChainDB, root: Eth2Digest, index: ColumnIndex,
+                           value: var DataColumnSidecar): bool =
+  db.columns.getSZSSZ(columnkey(root, index), value) == GetResult.found
+
 proc getBlockSZ*(
     db: BeaconChainDB, key: Eth2Digest, data: var seq[byte],
     T: type phase0.TrustedSignedBeaconBlock): bool =
@@ -1113,7 +1176,8 @@ proc getBlockSZ*(
 
 proc getBlockSZ*[
     X: bellatrix.TrustedSignedBeaconBlock | capella.TrustedSignedBeaconBlock |
-       deneb.TrustedSignedBeaconBlock | electra.TrustedSignedBeaconBlock](
+       deneb.TrustedSignedBeaconBlock | electra.TrustedSignedBeaconBlock |
+       fulu.TrustedSignedBeaconBlock](
     db: BeaconChainDB, key: Eth2Digest, data: var seq[byte], T: type X): bool =
   let dataPtr = addr data # Short-lived
   func decode(data: openArray[byte]) =
@@ -1211,7 +1275,8 @@ proc getStateOnlyMutableValidators(
 proc getStateOnlyMutableValidators(
     immutableValidators: openArray[ImmutableValidatorData2],
     store: KvStoreRef, key: openArray[byte],
-    output: var (capella.BeaconState | deneb.BeaconState | electra.BeaconState),
+    output: var (capella.BeaconState | deneb.BeaconState | electra.BeaconState |
+                 fulu.BeaconState),
     rollback: RollbackProc): bool =
   ## Load state into `output` - BeaconState is large so we want to avoid
   ## re-allocating it if possible
@@ -1296,7 +1361,8 @@ proc getState*(
 proc getState*(
     db: BeaconChainDB, key: Eth2Digest,
     output: var (altair.BeaconState | bellatrix.BeaconState |
-                 capella.BeaconState | deneb.BeaconState | electra.BeaconState),
+                 capella.BeaconState | deneb.BeaconState | electra.BeaconState |
+                 fulu.BeaconState),
     rollback: RollbackProc): bool =
   ## Load state into `output` - BeaconState is large so we want to avoid
   ## re-allocating it if possible
@@ -1376,7 +1442,7 @@ proc containsBlock*(
 proc containsBlock*[
     X: altair.TrustedSignedBeaconBlock | bellatrix.TrustedSignedBeaconBlock |
        capella.TrustedSignedBeaconBlock | deneb.TrustedSignedBeaconBlock |
-       electra.TrustedSignedBeaconBlock](
+       electra.TrustedSignedBeaconBlock | fulu.TrustedSignedBeaconBlock](
     db: BeaconChainDB, key: Eth2Digest, T: type X): bool =
   db.blocks[X.kind].contains(key.data).expectDb()
 
@@ -1517,7 +1583,7 @@ iterator getAncestorSummaries*(db: BeaconChainDB, root: Eth2Digest):
 
   # Backwards compat for reading old databases, or those that for whatever
   # reason lost a summary along the way..
-  static: doAssert ConsensusFork.high == ConsensusFork.Electra
+  static: doAssert ConsensusFork.high == ConsensusFork.Fulu
   while true:
     if db.v0.backend.getSnappySSZ(
         subkey(BeaconBlockSummary, res.root), res.summary) == GetResult.found:
@@ -1533,6 +1599,8 @@ iterator getAncestorSummaries*(db: BeaconChainDB, root: Eth2Digest):
     elif (let blck = db.getBlock(res.root, deneb.TrustedSignedBeaconBlock); blck.isSome()):
       res.summary = blck.get().message.toBeaconBlockSummary()
     elif (let blck = db.getBlock(res.root, electra.TrustedSignedBeaconBlock); blck.isSome()):
+      res.summary = blck.get().message.toBeaconBlockSummary()
+    elif (let blck = db.getBlock(res.root, fulu.TrustedSignedBeaconBlock); blck.isSome()):
       res.summary = blck.get().message.toBeaconBlockSummary()
     else:
       break

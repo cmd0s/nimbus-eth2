@@ -74,7 +74,7 @@ export
   tables, results, endians2, json_serialization, sszTypes, beacon_time, crypto,
   digest, presets
 
-const SPEC_VERSION* = "1.5.0-alpha.8"
+const SPEC_VERSION* = "1.5.0-alpha.9"
 ## Spec version we're aiming to be compatible with, right now
 
 const
@@ -400,7 +400,7 @@ type
     sync_committees*: Table[SyncCommitteePeriod, SyncCommitteeCache]
 
   # This matches the mutable state of the Solidity deposit contract
-  # https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.8/solidity_deposit_contract/deposit_contract.sol
+  # https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.9/solidity_deposit_contract/deposit_contract.sol
   DepositContractState* = object
     branch*: array[DEPOSIT_CONTRACT_TREE_DEPTH, Eth2Digest]
     deposit_count*: array[32, byte] # Uint256
@@ -891,8 +891,9 @@ func getSizeofSig(x: auto, n: int = 0): seq[(string, int, int)] =
 ##
 ## These SHOULD be used in function calls to avoid expensive temporary.
 ## see https://github.com/status-im/nimbus-eth2/pull/2250#discussion_r562010679
-template isomorphicCast*[T, U](x: U): T =
+template isomorphicCast*[T](x: auto): T =
   # Each of these pairs of types has ABI-compatible memory representations.
+  type U = typeof(x)
   static: doAssert (T is ref) == (U is ref)
   when T is ref:
     type
@@ -959,7 +960,8 @@ func checkForkConsistency*(cfg: RuntimeConfig) =
   let forkVersions =
     [cfg.GENESIS_FORK_VERSION, cfg.ALTAIR_FORK_VERSION,
      cfg.BELLATRIX_FORK_VERSION, cfg.CAPELLA_FORK_VERSION,
-     cfg.DENEB_FORK_VERSION, cfg.ELECTRA_FORK_VERSION]
+     cfg.DENEB_FORK_VERSION, cfg.ELECTRA_FORK_VERSION,
+     cfg.FULU_FORK_VERSION]
 
   for i in 0 ..< forkVersions.len:
     for j in i+1 ..< forkVersions.len:
@@ -978,6 +980,7 @@ func checkForkConsistency*(cfg: RuntimeConfig) =
   assertForkEpochOrder(cfg.BELLATRIX_FORK_EPOCH, cfg.CAPELLA_FORK_EPOCH)
   assertForkEpochOrder(cfg.CAPELLA_FORK_EPOCH, cfg.DENEB_FORK_EPOCH)
   assertForkEpochOrder(cfg.DENEB_FORK_EPOCH, cfg.ELECTRA_FORK_EPOCH)
+  assertForkEpochOrder(cfg.ELECTRA_FORK_EPOCH, cfg.FULU_FORK_EPOCH)
 
 func ofLen*[T, N](ListType: type List[T, N], n: int): ListType =
   if n < N:
@@ -986,3 +989,6 @@ func ofLen*[T, N](ListType: type List[T, N], n: int): ListType =
     raise newException(SszSizeMismatchError)
 
 template debugComment*(s: string) = discard
+
+# Specifically has the `Fulu` naming, for easy debugging.
+template debugFuluComment* (s: string) = discard

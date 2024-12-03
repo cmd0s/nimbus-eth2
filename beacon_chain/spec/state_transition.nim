@@ -168,6 +168,9 @@ func noRollback*(state: var deneb.HashedBeaconState) =
 func noRollback*(state: var electra.HashedBeaconState) =
   trace "Skipping rollback of broken Electra state"
 
+func noRollback*(state: var fulu.HashedBeaconState) =
+  trace "Skipping rollback of broken Fulu state"
+
 func maybeUpgradeStateToAltair(
     cfg: RuntimeConfig, state: var ForkedHashedBeaconState) =
   # Both process_slots() and state_transition_block() call this, so only run it
@@ -229,6 +232,19 @@ func maybeUpgradeStateToElectra(
       electraData: electra.HashedBeaconState(
         root: hash_tree_root(newState[]), data: newState[]))[]
 
+func maybeUpgradeStateToFulu(
+    cfg: RuntimeConfig, state: var ForkedHashedBeaconState,
+    cache: var StateCache) =
+  # Both process_slots() and state_transition_block() call this, so only run it
+  # once by checking for existing fork.
+  if getStateField(state, slot).epoch == cfg.FULU_FORK_EPOCH and
+      state.kind == ConsensusFork.Electra:
+    let newState = upgrade_to_fulu(cfg, state.electraData.data, cache)
+    state = (ref ForkedHashedBeaconState)(
+      kind: ConsensusFork.Fulu,
+      fuluData: fulu.HashedBeaconState(
+        root: hash_tree_root(newState[]), data: newState[]))[]
+
 func maybeUpgradeState*(
     cfg: RuntimeConfig, state: var ForkedHashedBeaconState,
     cache: var StateCache) =
@@ -237,6 +253,7 @@ func maybeUpgradeState*(
   cfg.maybeUpgradeStateToCapella(state)
   cfg.maybeUpgradeStateToDeneb(state)
   cfg.maybeUpgradeStateToElectra(state, cache)
+  cfg.maybeUpgradeStateToFulu(state, cache)
 
 proc process_slots*(
     cfg: RuntimeConfig, state: var ForkedHashedBeaconState, slot: Slot,
@@ -361,11 +378,11 @@ func partialBeaconBlock*(
     deposits: seq[Deposit],
     validator_changes: BeaconBlockValidatorChanges,
     sync_aggregate: SyncAggregate,
-    execution_payload: ForkyExecutionPayloadForSigning
-): auto =
+    execution_payload: ForkyExecutionPayloadForSigning,
+    _: ExecutionRequests): auto =
   const consensusFork = typeof(state).kind
 
-  # https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.8/specs/phase0/validator.md#preparing-for-a-beaconblock
+  # https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.9/specs/phase0/validator.md#preparing-for-a-beaconblock
   var res = consensusFork.BeaconBlock(
     slot: state.data.slot,
     proposer_index: proposer_index.uint64,
@@ -402,7 +419,7 @@ func partialBeaconBlock*(
 
 func partialBeaconBlock*(
     cfg: RuntimeConfig,
-    state: var electra.HashedBeaconState,
+    state: var (electra.HashedBeaconState | fulu.HashedBeaconState),
     proposer_index: ValidatorIndex,
     randao_reveal: ValidatorSig,
     eth1_data: Eth1Data,
@@ -411,8 +428,8 @@ func partialBeaconBlock*(
     deposits: seq[Deposit],
     validator_changes: BeaconBlockValidatorChanges,
     sync_aggregate: SyncAggregate,
-    execution_payload: ForkyExecutionPayloadForSigning
-): auto =
+    execution_payload: ForkyExecutionPayloadForSigning,
+    execution_requests: ExecutionRequests): auto =
   const consensusFork = typeof(state).kind
 
   # https://github.com/ethereum/consensus-specs/blob/v1.3.0/specs/phase0/validator.md#preparing-for-a-beaconblock
@@ -433,7 +450,8 @@ func partialBeaconBlock*(
       sync_aggregate: sync_aggregate,
       execution_payload: execution_payload.executionPayload,
       bls_to_execution_changes: validator_changes.bls_to_execution_changes,
-      blob_kzg_commitments: execution_payload.blobsBundle.commitments))
+      blob_kzg_commitments: execution_payload.blobsBundle.commitments,
+      execution_requests: execution_requests))
 
 proc makeBeaconBlockWithRewards*(
     cfg: RuntimeConfig,
@@ -455,7 +473,8 @@ proc makeBeaconBlockWithRewards*(
     verificationFlags: UpdateFlags,
     transactions_root: Opt[Eth2Digest],
     execution_payload_root: Opt[Eth2Digest],
-    kzg_commitments: Opt[KzgCommitments]):
+    kzg_commitments: Opt[KzgCommitments],
+    execution_requests: ExecutionRequests):
     Result[tuple[blck: ForkedBeaconBlock, rewards: BlockRewards], cstring] =
   ## Create a block for the given state. The latest block applied to it will
   ## be used for the parent_root value, and the slot will be take from
@@ -473,7 +492,7 @@ proc makeBeaconBlockWithRewards*(
         partialBeaconBlock(
           cfg, state.`kind Data`, proposer_index, randao_reveal, eth1_data,
           graffiti, attestations, deposits, validator_changes, sync_aggregate,
-          executionPayload))
+          executionPayload, execution_requests))
 
     let res = process_block(
       cfg, state.`kind Data`.data, blck.`kind Data`.asSigVerified(),
@@ -516,7 +535,33 @@ proc makeBeaconBlockWithRewards*(
           forkyState.data.latest_execution_payload_header.transactions_root =
             transactions_root.get
 
+          debugComment "verify (again) that this is what builder API needs"
           when executionPayload is electra.ExecutionPayloadForSigning:
+            # https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.3/specs/electra/beacon-chain.md#beaconblockbody
+            forkyState.data.latest_block_header.body_root = hash_tree_root(
+              [hash_tree_root(randao_reveal),
+               hash_tree_root(eth1_data),
+               hash_tree_root(graffiti),
+               hash_tree_root(validator_changes.proposer_slashings),
+               hash_tree_root(validator_changes.electra_attester_slashings),
+               hash_tree_root(
+                 List[electra.Attestation, Limit MAX_ATTESTATIONS_ELECTRA](
+                   attestations)),
+               hash_tree_root(List[Deposit, Limit MAX_DEPOSITS](deposits)),
+               hash_tree_root(validator_changes.voluntary_exits),
+               hash_tree_root(sync_aggregate),
+               execution_payload_root.get,
+               hash_tree_root(validator_changes.bls_to_execution_changes),
+               hash_tree_root(kzg_commitments.get)
+            ])
+          else:
+            raiseAssert "Attempt to use non-Electra payload with post-Deneb state"
+        elif consensusFork == ConsensusFork.Fulu:
+          forkyState.data.latest_execution_payload_header.transactions_root =
+            transactions_root.get
+
+          debugFuluComment "verify (again) that this is what builder API needs"
+          when executionPayload is fulu.ExecutionPayloadForSigning:
             # https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.3/specs/electra/beacon-chain.md#beaconblockbody
             forkyState.data.latest_block_header.body_root = hash_tree_root(
               [hash_tree_root(randao_reveal),
@@ -535,7 +580,7 @@ proc makeBeaconBlockWithRewards*(
                hash_tree_root(kzg_commitments.get)
             ])
           else:
-            raiseAssert "Attempt to use non-Electra payload with post-Deneb state"
+            raiseAssert "Attempt to use non-Fulu payload with post-Electra state"
         else:
           static: raiseAssert "Unreachable"
 
@@ -563,6 +608,10 @@ proc makeBeaconBlockWithRewards*(
     case state.kind
     of ConsensusFork.Electra:   makeBeaconBlock(electra)
     else: raiseAssert "Attempt to use Electra payload with non-Electra state"
+  elif payloadFork == ConsensusFork.Fulu:
+    case state.kind
+    of ConsensusFork.Fulu:   makeBeaconBlock(fulu)
+    else: raiseAssert "Attempt to use Electra payload with non-Fulu state"
   else:
     {.error: "Unsupported fork".}
 
@@ -579,14 +628,16 @@ proc makeBeaconBlock*(
     verificationFlags: UpdateFlags,
     transactions_root: Opt[Eth2Digest],
     execution_payload_root: Opt[Eth2Digest],
-    kzg_commitments: Opt[KzgCommitments]):
+    kzg_commitments: Opt[KzgCommitments],
+    execution_requests: ExecutionRequests):
     Result[ForkedBeaconBlock, cstring] =
   let blockAndRewards =
     ? makeBeaconBlockWithRewards(
       cfg, state, proposer_index, randao_reveal, eth1_data, graffiti,
       attestations, deposits, validator_changes, sync_aggregate,
       executionPayload, rollback, cache, verificationFlags,
-      transactions_root, execution_payload_root, kzg_commitments)
+      transactions_root, execution_payload_root, kzg_commitments,
+      execution_requests)
   ok(blockAndRewards.blck)
 
 proc makeBeaconBlock*(
@@ -606,7 +657,8 @@ proc makeBeaconBlock*(
     executionPayload, rollback, cache,
     verificationFlags = {}, transactions_root = Opt.none Eth2Digest,
     execution_payload_root = Opt.none Eth2Digest,
-    kzg_commitments = Opt.none KzgCommitments)
+    kzg_commitments = Opt.none KzgCommitments,
+    execution_requests = default(ExecutionRequests))
 
 proc makeBeaconBlock*(
     cfg: RuntimeConfig, state: var ForkedHashedBeaconState,
@@ -627,4 +679,5 @@ proc makeBeaconBlock*(
     verificationFlags = verificationFlags,
     transactions_root = Opt.none Eth2Digest,
     execution_payload_root = Opt.none Eth2Digest,
-    kzg_commitments = Opt.none KzgCommitments)
+    kzg_commitments = Opt.none KzgCommitments,
+    execution_requests = default(ExecutionRequests))

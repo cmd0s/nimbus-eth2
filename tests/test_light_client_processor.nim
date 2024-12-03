@@ -28,13 +28,14 @@ suite "Light client processor" & preset():
     highPeriod = 6.SyncCommitteePeriod
   let
     cfg = block:  # Fork schedule so that each `LightClientDataFork` is covered
-      static: doAssert ConsensusFork.high == ConsensusFork.Electra
+      static: doAssert ConsensusFork.high == ConsensusFork.Fulu
       var res = defaultRuntimeConfig
       res.ALTAIR_FORK_EPOCH = 1.Epoch
       res.BELLATRIX_FORK_EPOCH = 2.Epoch
       res.CAPELLA_FORK_EPOCH = (EPOCHS_PER_SYNC_COMMITTEE_PERIOD * 1).Epoch
       res.DENEB_FORK_EPOCH = (EPOCHS_PER_SYNC_COMMITTEE_PERIOD * 2).Epoch
       res.ELECTRA_FORK_EPOCH = (EPOCHS_PER_SYNC_COMMITTEE_PERIOD * 3).Epoch
+      res.FULU_FORK_EPOCH = (EPOCHS_PER_SYNC_COMMITTEE_PERIOD * 4).Epoch
       res
 
   const numValidators = SLOTS_PER_EPOCH
@@ -289,7 +290,7 @@ suite "Light client processor" & preset():
               template forkyUpdate: untyped = upgraded[].forky(lcDataFork)
               check forkyStore.finalized_header != forkyUpdate.attested_header
 
-      var oldFinalized {.noinit.}: ForkedLightClientHeader
+      var oldFinalized: ForkedLightClientHeader
       withForkyStore(store[]):
         when lcDataFork > LightClientDataFork.None:
           oldFinalized = ForkedLightClientHeader.init(

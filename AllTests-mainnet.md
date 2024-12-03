@@ -61,7 +61,12 @@ OK: 4/4 Fail: 0/4 Skip: 0/4
 + sanity check Electra blocks [Preset: mainnet]                                              OK
 + sanity check Electra states [Preset: mainnet]                                              OK
 + sanity check Electra states, reusing buffers [Preset: mainnet]                             OK
++ sanity check Fulu and cross-fork getState rollback [Preset: mainnet]                       OK
++ sanity check Fulu blocks [Preset: mainnet]                                                 OK
++ sanity check Fulu states [Preset: mainnet]                                                 OK
++ sanity check Fulu states, reusing buffers [Preset: mainnet]                                OK
 + sanity check blobs (Deneb) [Preset: mainnet]                                               OK
++ sanity check data columns [Preset: mainnet]                                                OK
 + sanity check genesis roundtrip [Preset: mainnet]                                           OK
 + sanity check phase 0 blocks [Preset: mainnet]                                              OK
 + sanity check phase 0 getState rollback [Preset: mainnet]                                   OK
@@ -69,7 +74,16 @@ OK: 4/4 Fail: 0/4 Skip: 0/4
 + sanity check phase 0 states, reusing buffers [Preset: mainnet]                             OK
 + sanity check state diff roundtrip [Preset: mainnet]                                        OK
 ```
-OK: 29/29 Fail: 0/29 Skip: 0/29
+OK: 34/34 Fail: 0/34 Skip: 0/34
+## Beacon chain file test suite
+```diff
++ Auto check/repair test (missing data)                                                      OK
++ Auto check/repair test (missing footer)                                                    OK
++ Auto check/repair test (missing last chunk)                                                OK
++ Auto check/repair test (only header)                                                       OK
++ Fixture file validation                                                                    OK
+```
+OK: 5/5 Fail: 0/5 Skip: 0/5
 ## Beacon state [Preset: mainnet]
 ```diff
 + Smoke test initialize_beacon_state_from_eth1 [Preset: mainnet]                             OK
@@ -98,8 +112,9 @@ OK: 1/1 Fail: 0/1 Skip: 0/1
 + Capella toSignedBlindedBeaconBlock                                                         OK
 + Deneb toSignedBlindedBeaconBlock                                                           OK
 + Electra toSignedBlindedBeaconBlock                                                         OK
++ Fulu toSignedBlindedBeaconBlock                                                            OK
 ```
-OK: 4/4 Fail: 0/4 Skip: 0/4
+OK: 5/5 Fail: 0/5 Skip: 0/5
 ## Block pool altair processing [Preset: mainnet]
 ```diff
 + Invalid signatures [Preset: mainnet]                                                       OK
@@ -559,9 +574,8 @@ OK: 5/5 Fail: 0/5 Skip: 0/5
 + Roundtrip engine RPC V1 and bellatrix ExecutionPayload representations                     OK
 + Roundtrip engine RPC V2 and capella ExecutionPayload representations                       OK
 + Roundtrip engine RPC V3 and deneb ExecutionPayload representations                         OK
-+ Roundtrip engine RPC V4 and electra ExecutionPayload representations                       OK
 ```
-OK: 4/4 Fail: 0/4 Skip: 0/4
+OK: 3/3 Fail: 0/3 Skip: 0/3
 ## Eth1 monitor
 ```diff
 + Deposits chain                                                                             OK
@@ -980,12 +994,13 @@ OK: 7/7 Fail: 0/7 Skip: 0/7
 + [SyncQueue#Forward] Start and finish slots equal                                           OK
 + [SyncQueue#Forward] Two full requests success/fail                                         OK
 + [SyncQueue#Forward] getRewindPoint() test                                                  OK
++ [SyncQueue] checkBlobsResponse() test                                                      OK
 + [SyncQueue] checkResponse() test                                                           OK
 + [SyncQueue] contains() test                                                                OK
 + [SyncQueue] getLastNonEmptySlot() test                                                     OK
 + [SyncQueue] hasEndGap() test                                                               OK
 ```
-OK: 24/24 Fail: 0/24 Skip: 0/24
+OK: 25/25 Fail: 0/25 Skip: 0/25
 ## Type helpers
 ```diff
 + BeaconBlock                                                                                OK
@@ -1129,4 +1144,4 @@ OK: 2/2 Fail: 0/2 Skip: 0/2
 OK: 9/9 Fail: 0/9 Skip: 0/9
 
 ---TOTAL---
-OK: 766/771 Fail: 0/771 Skip: 5/771
+OK: 777/782 Fail: 0/782 Skip: 5/782
