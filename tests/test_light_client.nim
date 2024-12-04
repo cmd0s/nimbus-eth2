@@ -25,13 +25,14 @@ suite "Light client" & preset():
     headPeriod = 4.SyncCommitteePeriod
   let
     cfg = block:  # Fork schedule so that each `LightClientDataFork` is covered
-      static: doAssert ConsensusFork.high == ConsensusFork.Electra
+      static: doAssert ConsensusFork.high == ConsensusFork.Fulu
       var res = defaultRuntimeConfig
       res.ALTAIR_FORK_EPOCH = 1.Epoch
       res.BELLATRIX_FORK_EPOCH = 2.Epoch
       res.CAPELLA_FORK_EPOCH = (EPOCHS_PER_SYNC_COMMITTEE_PERIOD * 1).Epoch
       res.DENEB_FORK_EPOCH = (EPOCHS_PER_SYNC_COMMITTEE_PERIOD * 2).Epoch
       res.ELECTRA_FORK_EPOCH = (EPOCHS_PER_SYNC_COMMITTEE_PERIOD * 3).Epoch
+      res.FULU_FORK_EPOCH = (EPOCHS_PER_SYNC_COMMITTEE_PERIOD * 4).Epoch
       res
     altairStartSlot = cfg.ALTAIR_FORK_EPOCH.start_slot
 
@@ -146,7 +147,7 @@ suite "Light client" & preset():
     # Initialize light client store
     var bootstrap = dag.getLightClientBootstrap(trusted_block_root)
     check bootstrap.kind > LightClientDataFork.None
-    var store {.noinit.}: ForkedLightClientStore
+    var store: ForkedLightClientStore
     withForkyBootstrap(bootstrap):
       when lcDataFork > LightClientDataFork.None:
         var storeRes = newClone(initialize_light_client_store(

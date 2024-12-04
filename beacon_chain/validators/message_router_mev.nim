@@ -46,7 +46,8 @@ proc unblindAndRouteBlockMEV*(
     node: BeaconNode, payloadBuilderRestClient: RestClientRef,
     blindedBlock:
       deneb_mev.SignedBlindedBeaconBlock |
-      electra_mev.SignedBlindedBeaconBlock):
+      electra_mev.SignedBlindedBeaconBlock |
+      fulu_mev.SignedBlindedBeaconBlock):
     Future[Result[Opt[BlockRef], string]] {.async: (raises: [CancelledError]).} =
   const consensusFork = typeof(blindedBlock).kind
 
@@ -90,6 +91,9 @@ proc unblindAndRouteBlockMEV*(
   elif blindedBlock is electra_mev.SignedBlindedBeaconBlock:
     let res = decodeBytes(
       SubmitBlindedBlockResponseElectra, response.data, response.contentType)
+  elif blindedBlock is fulu_mev.SignedBlindedBeaconBlock:
+    let res = decodeBytes(
+      SubmitBlindedBlockResponseFulu, response.data, response.contentType)
   else:
     static: doAssert false
 

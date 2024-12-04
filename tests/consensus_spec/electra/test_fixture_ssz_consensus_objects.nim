@@ -175,6 +175,7 @@ suite "EF - Electra - SSZ consensus objects " & preset():
             checkSSZ(SignedContributionAndProof, path, hash)
           of "SignedVoluntaryExit": checkSSZ(SignedVoluntaryExit, path, hash)
           of "SigningData": checkSSZ(SigningData, path, hash)
+          of "SingleAttestation": checkSSZ(SingleAttestation, path, hash)
           of "StableAttestation":
             checkSSZ(StableAttestation, path, hash)
           of "StableAttesterSlashing":
