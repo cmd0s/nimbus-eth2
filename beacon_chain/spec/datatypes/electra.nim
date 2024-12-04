@@ -63,15 +63,13 @@ const
   EXECUTION_PAYLOAD_GINDEX_ELECTRA* = 137.GeneralizedIndex
 type
   # https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.3/specs/electra/beacon-chain.md#indexedattestation
-  IndexedAttestation* {.
-      sszProfile: StableIndexedAttestation.} = object
+  IndexedAttestation* {.sszProfile: StableIndexedAttestation.} = object
     attesting_indices*:
       List[uint64, Limit MAX_VALIDATORS_PER_COMMITTEE * MAX_COMMITTEES_PER_SLOT]
     data*: AttestationData
     signature*: ValidatorSig
 
-  TrustedIndexedAttestation* {.
-      sszProfile: StableIndexedAttestation.} = object
+  TrustedIndexedAttestation* {.sszProfile: StableIndexedAttestation.} = object
     # The Trusted version, at the moment, implies that the cryptographic signature was checked.
     # It DOES NOT imply that the state transition was verified.
     # Currently the code MUST verify the state transition as soon as the signature is verified
@@ -138,6 +136,7 @@ type
     executionPayload*: ExecutionPayload
     blockValue*: Wei
     blobsBundle*: BlobsBundle
+    executionRequests*: array[3, seq[byte]]
 
   # https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.8/specs/deneb/beacon-chain.md#executionpayloadheader
   ExecutionPayloadHeader* {.sszProfile: StableExecutionPayloadHeader.} = object
@@ -169,13 +168,20 @@ type
   ExecutionBranch* =
     array[log2trunc(EXECUTION_PAYLOAD_GINDEX_ELECTRA), Eth2Digest]
 
-  # https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.8/specs/phase0/validator.md#aggregateandproof
+  # https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.9/specs/electra/beacon-chain.md#singleattestation
+  SingleAttestation* = object
+    committee_index*: uint64
+    attester_index*: uint64
+    data*: AttestationData
+    signature*: ValidatorSig
+
+  # https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.9/specs/phase0/validator.md#aggregateandproof
   AggregateAndProof* = object
     aggregator_index*: uint64 # `ValidatorIndex` after validation
     aggregate*: Attestation
     selection_proof*: ValidatorSig
 
-  # https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.8/specs/phase0/validator.md#signedaggregateandproof
+  # https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.9/specs/phase0/validator.md#signedaggregateandproof
   SignedAggregateAndProof* = object
     message*: AggregateAndProof
     signature*: ValidatorSig
@@ -300,7 +306,7 @@ type
         Limit MAX_CONSOLIDATION_REQUESTS_PER_PAYLOAD]  # [New in Electra:EIP7251]
 
   # https://github.com/ethereum/consensus-specs/blob/82133085a1295e93394ebdf71df8f2f6e0962588/specs/electra/beacon-chain.md#beaconstate
-  BeaconState* {.sszProfile: StableBeaconState.}= object
+  BeaconState* {.sszProfile: StableBeaconState.} = object
     # Versioning
     genesis_time*: uint64
     genesis_validators_root*: Eth2Digest
@@ -478,7 +484,7 @@ type
     execution_requests*: ExecutionRequests  # [New in Electra]
 
   SigVerifiedBeaconBlockBody* {.
-      sszProfile: StableBeaconBlockBody.}  = object
+      sszProfile: StableBeaconBlockBody.} = object
     ## A BeaconBlock body with signatures verified
     ## including:
     ## - Randao reveal
@@ -518,8 +524,7 @@ type
     blob_kzg_commitments*: KzgCommitments
     execution_requests*: ExecutionRequests  # [New in Electra]
 
-  TrustedBeaconBlockBody* {.
-      sszProfile: StableBeaconBlockBody.}  = object
+  TrustedBeaconBlockBody* {.sszProfile: StableBeaconBlockBody.} = object
     ## A full verified block
     randao_reveal*: TrustedSig
     eth1_data*: Eth1Data

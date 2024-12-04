@@ -79,7 +79,8 @@ func popBlobs*(
     quarantine: var BlobQuarantine, digest: Eth2Digest,
     blck:
       deneb.SignedBeaconBlock |
-      electra.SignedBeaconBlock): auto =
+      electra.SignedBeaconBlock |
+      fulu.SignedBeaconBlock): auto =
   const blobFork = blobForkAtConsensusFork(typeof(blck).kind).expect("Blobs OK")
   type ResultType = blobFork.BlobSidecars
   var r: ResultType = @[]
@@ -97,7 +98,10 @@ func hasBlobs*(
     quarantine: BlobQuarantine,
     blck:
       deneb.SignedBeaconBlock |
-      electra.SignedBeaconBlock): bool =
+      electra.SignedBeaconBlock |
+      fulu.SignedBeaconBlock): bool =
+  # Having a fulu SignedBeaconBlock is incorrect atm, but
+  # shall be fixed once data columns are rebased to fulu
   for idx, kzg_commitment in blck.message.body.blob_kzg_commitments:
     if (blck.root, BlobIndex idx, kzg_commitment) notin quarantine.blobs:
       return false
@@ -107,7 +111,8 @@ func blobFetchRecord*(
     quarantine: BlobQuarantine,
     blck:
       deneb.SignedBeaconBlock |
-      electra.SignedBeaconBlock): BlobFetchRecord =
+      electra.SignedBeaconBlock |
+      fulu.SignedBeaconBlock): BlobFetchRecord =
   var indices: seq[BlobIndex]
   for i in 0..<len(blck.message.body.blob_kzg_commitments):
     let idx = BlobIndex(i)

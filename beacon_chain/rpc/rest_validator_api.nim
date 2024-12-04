@@ -408,7 +408,13 @@ proc installValidatorApiHandlers*(router: var RestRouter, node: BeaconNode) =
     return
       withBlck(message.blck):
         let data =
-          when consensusFork >= ConsensusFork.Electra:
+          when consensusFork >= ConsensusFork.Fulu:
+            let blobsBundle = message.blobsBundleOpt.get()
+            fulu.BlockContents(
+              `block`: forkyBlck,
+              kzg_proofs: blobsBundle.proofs,
+              blobs: blobsBundle.blobs)
+          elif consensusFork >= ConsensusFork.Electra:
             let blobsBundle = message.blobsBundleOpt.get()
             electra.BlockContents(
               `block`: forkyBlck,
@@ -840,21 +846,27 @@ proc installValidatorApiHandlers*(router: var RestRouter, node: BeaconNode) =
           return RestApiResponse.jsonError(Http400,
                             InvalidAttestationDataRootValueError, $res.error())
         res.get()
-    let phase0_attestations =
-      node.attestationPool[].getPhase0AggregatedAttestation(qslot, root)
 
-    if phase0_attestations.isSome():
-      return RestApiResponse.jsonResponse(phase0_attestations.get())
+    let
+      qfork = node.dag.cfg.consensusForkAtEpoch(qslot.epoch)
+      forked =
+        if qfork >= ConsensusFork.Electra:
+          let electra_attestation =
+            node.attestationPool[].getElectraAggregatedAttestation(
+              qslot, root, committee_index).valueOr:
+              return RestApiResponse.jsonError(Http404,
+                UnableToGetAggregatedAttestationError)
+          ForkedAttestation.init(electra_attestation, qfork)
+        else:
+          let phase0_attestation =
+            node.attestationPool[].getPhase0AggregatedAttestation(
+              qslot, root).valueOr:
+              return RestApiResponse.jsonError(Http404,
+                UnableToGetAggregatedAttestationError)
+          ForkedAttestation.init(phase0_attestation, qfork)
 
-    let electra_attestations =
-      node.attestationPool[].getElectraAggregatedAttestation(qslot,
-                                                             root,
-                                                             committee_index)
-
-    if electra_attestations.isSome():
-      return RestApiResponse.jsonResponse(electra_attestations.get())
-
-    RestApiResponse.jsonError(Http400, UnableToGetAggregatedAttestationError)
+    let headers = HttpTable.init([("eth-consensus-version", qfork.toString())])
+    RestApiResponse.jsonResponsePlain(forked, headers)
 
   # https://ethereum.github.io/beacon-APIs/#/Validator/publishAggregateAndProofs
   router.api2(MethodPost, "/eth/v1/validator/aggregate_and_proofs") do (
@@ -916,7 +928,7 @@ proc installValidatorApiHandlers*(router: var RestRouter, node: BeaconNode) =
     case consensusVersion.get():
       of ConsensusFork.Phase0 .. ConsensusFork.Deneb:
         addDecodedProofs(phase0.SignedAggregateAndProof)
-      of ConsensusFork.Electra:
+      of ConsensusFork.Electra .. ConsensusFork.Fulu:
         addDecodedProofs(electra.SignedAggregateAndProof)
 
     await allFutures(proofs)

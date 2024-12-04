@@ -17,7 +17,7 @@ import
   std/[json, tables],
   stew/base10, web3/primitives, httputils,
   ".."/[deposit_snapshots, forks],
-  ".."/mev/deneb_mev
+  ".."/mev/[deneb_mev]
 
 export forks, phase0, altair, bellatrix, capella, deneb_mev, tables, httputils
 
@@ -46,6 +46,9 @@ const
   LowestScoreAggregatedAttestation* =
     phase0.Attestation(
       aggregation_bits: CommitteeValidatorsBits(BitSeq.init(1)))
+  LowestScoreAggregatedElectraAttestation* =
+    electra.Attestation(
+      aggregation_bits: ElectraCommitteeValidatorsBits(BitSeq.init(1)))
 
 static:
   doAssert(ClientMaximumValidatorIds <= ServerMaximumValidatorIds)
@@ -306,6 +309,11 @@ type
     kzg_proofs*: deneb.KzgProofs
     blobs*: deneb.Blobs
 
+  FuluSignedBlockContents* = object
+    signed_block*: fulu.SignedBeaconBlock
+    kzg_proofs*: deneb.KzgProofs
+    blobs*: deneb.Blobs
+
   RestPublishedSignedBlockContents* = object
     case kind*: ConsensusFork
     of ConsensusFork.Phase0:    phase0Data*:    phase0.SignedBeaconBlock
@@ -314,6 +322,7 @@ type
     of ConsensusFork.Capella:   capellaData*:   capella.SignedBeaconBlock
     of ConsensusFork.Deneb:     denebData*:     DenebSignedBlockContents
     of ConsensusFork.Electra:   electraData*:   ElectraSignedBlockContents
+    of ConsensusFork.Fulu:      fuluData*:      FuluSignedBlockContents
 
   ProduceBlockResponseV3* = ForkedMaybeBlindedBeaconBlock
 
@@ -464,6 +473,7 @@ type
 
   GetBlockV2Response* = ForkedSignedBeaconBlock
   GetStateV2Response* = ref ForkedHashedBeaconState
+  GetAggregatedAttestationV2Response* = ForkedAttestation
 
   RestRoot* = object
     root*: Eth2Digest
@@ -497,7 +507,6 @@ type
   # Types based on the OAPI yaml file - used in responses to requests
   GetBeaconHeadResponse* = DataEnclosedObject[Slot]
   GetAggregatedAttestationResponse* = DataEnclosedObject[phase0.Attestation]
-  GetElectraAggregatedAttestationResponse* = DataEnclosedObject[electra.Attestation]
   GetAttesterDutiesResponse* = DataRootEnclosedObject[seq[RestAttesterDuty]]
   GetBlockAttestationsResponse* = DataEnclosedObject[seq[phase0.Attestation]]
   GetBlockHeaderResponse* = DataOptimisticAndFinalizedObject[RestBlockHeaderInfo]
@@ -511,6 +520,7 @@ type
   GetGenesisResponse* = DataEnclosedObject[RestGenesis]
   GetHeaderResponseDeneb* = DataVersionEnclosedObject[deneb_mev.SignedBuilderBid]
   GetHeaderResponseElectra* = DataVersionEnclosedObject[electra_mev.SignedBuilderBid]
+  GetHeaderResponseFulu* = DataVersionEnclosedObject[fulu_mev.SignedBuilderBid]
   GetNetworkIdentityResponse* = DataEnclosedObject[RestNetworkIdentity]
   GetPeerCountResponse* = DataMetaEnclosedObject[RestPeerCount]
   GetPeerResponse* = DataMetaEnclosedObject[RestNodePeer]
@@ -535,10 +545,10 @@ type
   GetVersionResponse* = DataEnclosedObject[RestNodeVersion]
   GetEpochSyncCommitteesResponse* = DataEnclosedObject[RestEpochSyncCommittee]
   ProduceAttestationDataResponse* = DataEnclosedObject[AttestationData]
-  ProduceBlindedBlockResponse* = ForkedBlindedBeaconBlock
   ProduceSyncCommitteeContributionResponse* = DataEnclosedObject[SyncCommitteeContribution]
   SubmitBlindedBlockResponseDeneb* = DataEnclosedObject[deneb_mev.ExecutionPayloadAndBlobsBundle]
   SubmitBlindedBlockResponseElectra* = DataEnclosedObject[electra_mev.ExecutionPayloadAndBlobsBundle]
+  SubmitBlindedBlockResponseFulu* = DataEnclosedObject[fulu_mev.ExecutionPayloadAndBlobsBundle]
   GetValidatorsActivityResponse* = DataEnclosedObject[seq[RestActivityItem]]
   GetValidatorsLivenessResponse* = DataEnclosedObject[seq[RestLivenessItem]]
   SubmitBeaconCommitteeSelectionsResponse* = DataEnclosedObject[seq[RestBeaconCommitteeSelection]]
@@ -578,14 +588,29 @@ type
     extra_data*: RestExtraData
 
 func isLowestScoreAggregatedAttestation*(a: phase0.Attestation): bool =
-  (a.data.slot == Slot(0)) and (a.data.index == 0'u64) and
-  (a.data.source.epoch == Epoch(0)) and (a.data.target.epoch == Epoch(0))
+  (a.data.slot == GENESIS_SLOT) and
+  (a.data.index == 0'u64) and
+  (a.data.source.epoch == GENESIS_EPOCH) and
+  (a.data.target.epoch == GENESIS_EPOCH)
+
+func isLowestScoreAggregatedAttestation*(a: ForkedAttestation): bool =
+  withAttestation(a):
+    (forkyAttestation.data.slot == GENESIS_SLOT) and
+    (forkyAttestation.data.index == 0'u64) and
+    (forkyAttestation.data.source.epoch == GENESIS_EPOCH) and
+    (forkyAttestation.data.target.epoch == GENESIS_EPOCH)
 
 func `==`*(a, b: RestValidatorIndex): bool {.borrow.}
 
 template withForkyBlck*(
     x: RestPublishedSignedBlockContents, body: untyped): untyped =
   case x.kind
+  of ConsensusFork.Fulu:
+    const consensusFork {.inject, used.} = ConsensusFork.Fulu
+    template forkyBlck: untyped {.inject, used.} = x.fuluData.signed_block
+    template kzg_proofs: untyped {.inject, used.} = x.fuluData.kzg_proofs
+    template blobs: untyped {.inject, used.} = x.fuluData.blobs
+    body
   of ConsensusFork.Electra:
     const consensusFork {.inject, used.} = ConsensusFork.Electra
     template forkyBlck: untyped {.inject, used.} = x.electraData.signed_block
@@ -631,6 +656,8 @@ func init*(T: type ForkedSignedBeaconBlock,
       ForkedSignedBeaconBlock.init(contents.denebData.signed_block)
     of ConsensusFork.Electra:
       ForkedSignedBeaconBlock.init(contents.electraData.signed_block)
+    of ConsensusFork.Fulu:
+      ForkedSignedBeaconBlock.init(contents.fuluData.signed_block)
 
 func init*(t: typedesc[RestPublishedSignedBlockContents],
            blck: phase0.BeaconBlock, root: Eth2Digest,
@@ -695,6 +722,22 @@ func init*(t: typedesc[RestPublishedSignedBlockContents],
     kind: ConsensusFork.Electra,
     electraData: ElectraSignedBlockContents(
       signed_block: electra.SignedBeaconBlock(
+        message: contents.`block`,
+        root: root,
+        signature: signature
+      ),
+      kzg_proofs: contents.kzg_proofs,
+      blobs: contents.blobs
+    )
+  )
+
+func init*(t: typedesc[RestPublishedSignedBlockContents],
+           contents: fulu.BlockContents, root: Eth2Digest,
+           signature: ValidatorSig): RestPublishedSignedBlockContents =
+  RestPublishedSignedBlockContents(
+    kind: ConsensusFork.Fulu,
+    fuluData: FuluSignedBlockContents(
+      signed_block: fulu.SignedBeaconBlock(
         message: contents.`block`,
         root: root,
         signature: signature
