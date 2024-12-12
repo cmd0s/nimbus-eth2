@@ -141,8 +141,7 @@ func hasMissingDataColumns*(quarantine: DataColumnQuarantine,
                           max(SAMPLES_PER_SLOT.uint64,
                               localSubnetCount))
   for i in localCustodyColumns:
-    if (blck.root, ColumnIndex i) notin quarantine.data_columns and 
-        len(blck.message.body.blob_kzg_commitments) != 0:
+    if (blck.root, ColumnIndex i) notin quarantine.data_columns:
       inc counter
   if quarantine.supernode and counter != NUMBER_OF_COLUMNS:
     return false

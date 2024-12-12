@@ -193,7 +193,7 @@ proc reconstruction_terms*(blobIdx: int,
   debugEcho blobIdx
   # Call the recovery function and handle results
   let recovered_cell_and_proof = recoverCellsAndKzgProofs(cell_ids, ckzgCells)
-  if recovered_cell_and_proof.isErr:
+  if not recovered_cell_and_proof.isOk:
     return err("Issue with computing cells and proofs!")
   ok(recovered_cell_and_proof.get)
  
