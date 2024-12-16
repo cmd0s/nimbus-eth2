@@ -236,7 +236,7 @@ proc runVerifyCellKzgProofBatchTest(suiteName, suitePath, path: string) =
       cells = data["input"]["cells"].mapIt(fromHex[2048](it.getStr))
       proofs = data["input"]["proofs"].mapIt(fromHex[48](it.getStr))
 
-    # https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.9/tests/formats/kzg_7594/verify_cell_kzg_proof_batch.md#condition
+    # https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.10/tests/formats/kzg_7594/verify_cell_kzg_proof_batch.md#condition
     # If the blob is invalid (e.g. incorrect length or one of the 32-byte
     # blocks does not represent a BLS field element) it should error, i.e. the
     # the output should be `null`.
@@ -332,7 +332,7 @@ suite suiteName:
 suiteName = "EF - KZG - EIP7594"
 
 suite suiteName:
-  const suitePath = SszTestsDir/"general"/"eip7594"/"kzg"
+  const suitePath = SszTestsDir/"general"/"fulu"/"kzg"
 
   # TODO also check that the only direct subdirectory of each is kzg-mainnet
   doAssert sorted(mapIt(

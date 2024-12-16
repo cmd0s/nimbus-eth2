@@ -69,7 +69,7 @@ type
     protocols: seq[ProtocolInfo]
       ## Protocols managed by the DSL and mounted on the switch
     protocolStates*: seq[RootRef]
-    metadata*: altair.MetaData
+    metadata*: fulu.MetaData
     connectTimeout*: chronos.Duration
     seenThreshold*: chronos.Duration
     connQueue: AsyncQueue[PeerAddr]
@@ -108,7 +108,7 @@ type
     lastReqTime*: Moment
     connections*: int
     enr*: Opt[enr.Record]
-    metadata*: Opt[altair.MetaData]
+    metadata*: Opt[fulu.MetaData]
     failedMetadataRequests: int
     lastMetadataTime*: Moment
     direction*: PeerType
@@ -1647,6 +1647,15 @@ proc runDiscoveryLoop(node: Eth2Node) {.async: (raises: [CancelledError]).} =
     # Also, give some time to dial the discovered nodes and update stats etc
     await sleepAsync(5.seconds)
 
+proc fetchNodeIdFromPeerId*(peer: Peer): NodeId=
+  # Convert peer id to node id by extracting the peer's public key
+  let nodeId =
+    block:
+      var key: PublicKey
+      discard peer.peerId.extractPublicKey(key)
+      keys.PublicKey.fromRaw(key.skkey.getBytes()).get().toNodeId()
+  nodeId
+
 proc resolvePeer(peer: Peer) =
   # Resolve task which performs searching of peer's public key and recovery of
   # ENR using discovery5. We only resolve ENR for peers we know about to avoid
@@ -1803,7 +1812,7 @@ proc new(T: type Eth2Node,
     let
       connectTimeout = chronos.seconds(10)
       seenThreshold = chronos.seconds(10)
-  type MetaData = altair.MetaData # Weird bug without this..
+  type MetaData = fulu.MetaData # Weird bug without this..
 
   # Versions up to v22.3.0 would write an empty `MetaData` to
   #`data-dir/node-metadata.json` which would then be reloaded on startup - don't
@@ -2082,12 +2091,33 @@ proc p2pProtocolBackendImpl*(p: P2PProtocol): Backend =
 import ./peer_protocol
 export peer_protocol
 
+proc updateMetadataV2ToV3(metadataRes: NetRes[altair.MetaData]): 
+                          NetRes[fulu.MetaData] =
+  if metadataRes.isOk:
+    let metadata = metadataRes.get
+    ok(fulu.MetaData(seq_number: metadata.seq_number,
+                            attnets: metadata.attnets,
+                            syncnets: metadata.syncnets))
+  else:
+    err(metadataRes.error)
+
+proc getMetadata_vx(node: Eth2Node, peer: Peer): 
+                    Future[NetRes[fulu.MetaData]]
+                   {.async: (raises: [CancelledError]).} =
+  let
+    res = 
+      if node.getBeaconTime().slotOrZero.epoch >= node.cfg.FULU_FORK_EPOCH:
+        # Directly fetch fulu metadata if available
+        await getMetadata_v3(peer)
+      else:
+        updateMetadataV2ToV3(await getMetadata_v2(peer))
+  return res
+
 proc updatePeerMetadata(node: Eth2Node, peerId: PeerId) {.async: (raises: [CancelledError]).} =
   trace "updating peer metadata", peerId
-
   let
     peer = node.getPeer(peerId)
-    newMetadataRes = await peer.getMetadata_v2()
+    newMetadataRes = await node.getMetadata_vx(peer)
     newMetadata = newMetadataRes.valueOr:
       debug "Failed to retrieve metadata from peer!", peerId, error = newMetadataRes.error
       peer.failedMetadataRequests.inc()
@@ -2397,6 +2427,33 @@ func announcedENR*(node: Eth2Node): enr.Record =
   doAssert node.discovery != nil, "The Eth2Node must be initialized"
   node.discovery.localNode.record
 
+proc lookupCscFromPeer*(peer: Peer): uint64 =
+  # Fetches the custody column count from a remote peer.
+  # If the peer advertises their custody column count via the `csc` ENR field,
+  # that value is returned. Otherwise, the default value `CUSTODY_REQUIREMENT`
+  # is assumed.
+
+  let metadata = peer.metadata
+  if metadata.isOk:
+    return metadata.get.custody_subnet_count
+
+  # Try getting the custody count from ENR if metadata fetch fails.
+  debug "Could not get csc from metadata, trying from ENR", 
+        peer_id = peer.peerId
+  let enrOpt = peer.enr
+  if not enrOpt.isNone:
+    let enr = enrOpt.get
+    let enrFieldOpt = enr.get(enrCustodySubnetCountField, seq[byte])
+    if enrFieldOpt.isOk:
+      try:
+        let csc = SSZ.decode(enrFieldOpt.get, uint8)
+        return csc.uint64
+      except SszError, SerializationError:
+        discard  # Ignore decoding errors and fallback to default
+
+  # Return default value if no valid custody subnet count is found.
+  return CUSTODY_REQUIREMENT.uint64
+
 func shortForm*(id: NetKeyPair): string =
   $PeerId.init(id.pubkey)
 
@@ -2558,8 +2615,22 @@ proc updateStabilitySubnetMetadata*(node: Eth2Node, attnets: AttnetBits) =
   else:
     debug "Stability subnets changed; updated ENR attnets", attnets
 
+proc loadCscnetMetadataAndEnr*(node: Eth2Node, cscnets: CscCount) =
+  node.metadata.custody_subnet_count = cscnets.uint64
+  let res =
+    node.discovery.updateRecord({
+      enrCustodySubnetCountField: SSZ.encode(cscnets)
+    })
+
+  if res.isErr:
+    # This should not occur in this scenario as the private key would always
+    # be the correct one and the ENR will not increase in size
+    warn "Failed to update the ENR csc field", error = res.error
+  else:
+    debug "Updated ENR csc", cscnets
+
 proc updateSyncnetsMetadata*(node: Eth2Node, syncnets: SyncnetBits) =
-  # https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.9/specs/altair/validator.md#sync-committee-subnet-stability
+  # https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.10/specs/altair/validator.md#sync-committee-subnet-stability
   if node.metadata.syncnets == syncnets:
     return
 

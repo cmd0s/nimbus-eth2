@@ -1,3 +1,34 @@
+2024-12-12 v24.12.0
+===================
+
+Nimbus `v24.12.0` is a `low-urgency` release.
+
+### Improvements
+
+* Support `bootstrap_nodes.yaml` bootstrap node specification:
+  https://github.com/status-im/nimbus-eth2/pull/6751
+
+2024-11-29 v24.11.0
+===================
+
+Nimbus `v24.11.0` is a `low-urgency` release with performance and compatibility improvements.
+
+### Improvements
+
+* Update Holesky bootnodes:
+  https://github.com/status-im/nimbus-eth2/pull/6703
+
+* Improve forward syncing performance:
+  https://github.com/status-im/nimbus-eth2/pull/6682
+
+* Experimental light client-based sync method, for testing only:
+  https://github.com/status-im/nimbus-eth2/pull/6515
+
+### Fixes
+
+* Avoid validator client network configuration mismatch errors pertaining to unscheduled forks:
+  https://github.com/status-im/nimbus-eth2/pull/6698
+
 2024-10-29 v24.10.0
 ===================
 

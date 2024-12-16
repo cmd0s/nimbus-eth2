@@ -291,7 +291,7 @@ proc initFullNode(
     rng: ref HmacDrbgContext,
     dag: ChainDAGRef,
     clist: ChainListRef,
-    taskpool: TaskPoolPtr,
+    taskpool: Taskpool,
     getBeaconTime: GetBeaconTimeFn) {.async.} =
   template config(): auto = node.config
 
@@ -417,11 +417,14 @@ proc initFullNode(
     blobQuarantine = newClone(BlobQuarantine.init(onBlobSidecarAdded))
     dataColumnQuarantine = newClone(DataColumnQuarantine.init())
     supernode = node.config.subscribeAllSubnets
-    localCustodySubnets = 
+    localCustodySubnets =
       if supernode:
         DATA_COLUMN_SIDECAR_SUBNET_COUNT.uint64
       else:
         CUSTODY_REQUIREMENT.uint64
+    custody_columns_set =
+      node.network.nodeId.get_custody_columns_set(max(SAMPLES_PER_SLOT.uint64,
+                                                      localCustodySubnets))
     consensusManager = ConsensusManager.new(
       dag, attestationPool, quarantine, node.elManager,
       ActionTracker.init(node.network.nodeId, config.subscribeAllSubnets),
@@ -478,6 +481,13 @@ proc initFullNode(
         Opt.some blob_sidecar
       else:
         Opt.none(ref BlobSidecar)
+    rmanDataColumnLoader = proc(
+        columnId: DataColumnIdentifier): Opt[ref DataColumnSidecar] =
+      var data_column_sidecar = DataColumnSidecar.new()
+      if dag.db.getDataColumnSidecar(columnId.block_root, columnId.index, data_column_sidecar[]):
+        Opt.some data_column_sidecar
+      else:
+        Opt.none(ref DataColumnSidecar)
 
     processor = Eth2Processor.new(
       config.doppelgangerDetection,
@@ -525,34 +535,40 @@ proc initFullNode(
       processor: processor,
       network: node.network)
     requestManager = RequestManager.init(
-      node.network, dag.cfg.DENEB_FORK_EPOCH, getBeaconTime,
-      (proc(): bool = syncManager.inProgress),
-      quarantine, blobQuarantine, rmanBlockVerifier,
-      rmanBlockLoader, rmanBlobLoader)
-  
-  # As per EIP 7594, the BN is now categorised into a 
+      node.network, supernode, custody_columns_set, dag.cfg.DENEB_FORK_EPOCH, 
+      getBeaconTime, (proc(): bool = syncManager.inProgress),
+      quarantine, blobQuarantine, dataColumnQuarantine, rmanBlockVerifier,
+      rmanBlockLoader, rmanBlobLoader, rmanDataColumnLoader)
+
+  # As per EIP 7594, the BN is now categorised into a
   # `Fullnode` and a `Supernode`, the fullnodes custodies a
   # given set of data columns, and hence ONLY subcribes to those
   # data column subnet topics, however, the supernodes subscribe
   # to all of the topics. This in turn keeps our `data column quarantine`
   # really variable. Whenever the BN is a supernode, column quarantine
-  # essentially means all the NUMBER_OF_COLUMNS, as per mentioned in the 
+  # essentially means all the NUMBER_OF_COLUMNS, as per mentioned in the
   # spec. However, in terms of fullnode, quarantine is really dependent
   # on the randomly assigned columns, by `get_custody_columns`.
 
   # Hence, in order to keep column quarantine accurate and error proof
   # the custody columns are computed once as the BN boots. Then the values
-  # are used globally around the codebase. 
+  # are used globally around the codebase.
 
   # `get_custody_columns` is not a very expensive function, but there
-  # are multiple instances of computing custody columns, especially 
+  # are multiple instances of computing custody columns, especially
   # during peer selection, sync with columns, and so on. That is why,
   # the rationale of populating it at boot and using it gloabally.
 
   dataColumnQuarantine[].supernode = supernode
-  dataColumnQuarantine[].custody_columns = 
+  dataColumnQuarantine[].custody_columns =
     node.network.nodeId.get_custody_columns(max(SAMPLES_PER_SLOT.uint64,
-                                            localCustodySubnets))
+                                                localCustodySubnets))
+
+  if node.config.subscribeAllSubnets:
+    node.network.loadCscnetMetadataAndEnr(DATA_COLUMN_SIDECAR_SUBNET_COUNT.uint8)
+  else:
+    node.network.loadCscnetMetadataAndEnr(CUSTODY_REQUIREMENT.uint8)
+
   if node.config.lightClientDataServe:
     proc scheduleSendingLightClientUpdates(slot: Slot) =
       if node.lightClientPool[].broadcastGossipFut != nil:
@@ -654,7 +670,6 @@ proc init*(T: type BeaconNode,
            metadata: Eth2NetworkMetadata): Future[BeaconNode]
           {.async.} =
   var
-    taskpool: TaskPoolPtr
     genesisState: ref ForkedHashedBeaconState = nil
 
   template cfg: auto = metadata.cfg
@@ -690,18 +705,20 @@ proc init*(T: type BeaconNode,
                 altair_fork_epoch = metadata.cfg.ALTAIR_FORK_EPOCH
           quit 1
 
-  try:
-    if config.numThreads < 0:
-      fatal "The number of threads --numThreads cannot be negative."
+  let taskpool =
+    try:
+      if config.numThreads < 0:
+        fatal "The number of threads --num-threads cannot be negative."
+        quit 1
+      elif config.numThreads == 0:
+        Taskpool.new(numThreads = min(countProcessors(), 16))
+      else:
+        Taskpool.new(numThreads = config.numThreads)
+    except CatchableError as e:
+      fatal "Cannot start taskpool", err = e.msg
       quit 1
-    elif config.numThreads == 0:
-      taskpool = TaskPoolPtr.new(numThreads = min(countProcessors(), 16))
-    else:
-      taskpool = TaskPoolPtr.new(numThreads = config.numThreads)
 
-    info "Threadpool started", numThreads = taskpool.numThreads
-  except Exception:
-    raise newException(Defect, "Failure in taskpool initialization.")
+  info "Threadpool started", numThreads = taskpool.numThreads
 
   if metadata.genesis.kind == BakedIn:
     if config.genesisState.isSome:
