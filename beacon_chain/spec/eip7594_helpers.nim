@@ -24,9 +24,9 @@ type
   CellBytes = array[fulu.CELLS_PER_EXT_BLOB, Cell]
   ProofBytes = array[fulu.CELLS_PER_EXT_BLOB, KzgProof]
 
-func sortedColumnIndices*(columnsPerSubnet: ColumnIndex,
-                          subnetIds: HashSet[uint64]):
-                          seq[ColumnIndex] =
+func sortedColumnIndices(columnsPerSubnet: ColumnIndex,
+                         subnetIds: HashSet[uint64]):
+                         seq[ColumnIndex] =
   var res: seq[ColumnIndex] = @[]
   for i in 0'u64 ..< columnsPerSubnet:
     for subnetId in subnetIds:
@@ -35,9 +35,9 @@ func sortedColumnIndices*(columnsPerSubnet: ColumnIndex,
   res.sort
   res
 
-func sortedColumnIndexList*(columnsPerSubnet: ColumnIndex,
-                            subnetIds: HashSet[uint64]):
-                            List[ColumnIndex, NUMBER_OF_COLUMNS] =
+func sortedColumnIndexList(columnsPerSubnet: ColumnIndex,
+                           subnetIds: HashSet[uint64]):
+                           List[ColumnIndex, NUMBER_OF_COLUMNS] =
   var
     res: seq[ColumnIndex]
   for i in 0'u64 ..< columnsPerSubnet:
@@ -92,6 +92,20 @@ func get_custody_columns*(node_id: NodeId,
       NUMBER_OF_COLUMNS div DATA_COLUMN_SIDECAR_SUBNET_COUNT
 
   sortedColumnIndices(ColumnIndex(columns_per_subnet), subnet_ids)
+
+func get_custody_columns_set*(node_id: NodeId,
+                              custody_subnet_count: uint64):
+                              HashSet[ColumnIndex] =
+  # This method returns a HashSet of column indices, 
+  # the method is specifically relevant while peer filtering
+  let
+    subnet_ids =
+      get_custody_column_subnets(node_id, custody_subnet_count)
+  const
+    columns_per_subnet =
+      NUMBER_OF_COLUMNS div DATA_COLUMN_SIDECAR_SUBNET_COUNT
+
+  sortedColumnIndices(ColumnIndex(columns_per_subnet), subnet_ids).toHashSet()
 
 func get_custody_column_list*(node_id: NodeId,
                               custody_subnet_count: uint64):

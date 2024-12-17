@@ -117,7 +117,7 @@ type
     seq_number*: uint64
     attnets*: AttnetBits
     syncnets*: SyncnetBits
-    custody_subnet_count*: CscCount
+    custody_subnet_count*: uint64
 
   # https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.8/specs/deneb/beacon-chain.md#executionpayload
   ExecutionPayload* = object
@@ -149,7 +149,7 @@ type
     executionPayload*: ExecutionPayload
     blockValue*: Wei
     blobsBundle*: BlobsBundle
-    executionRequests*: array[3, seq[byte]]
+    executionRequests*: seq[seq[byte]]
 
   # https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.8/specs/deneb/beacon-chain.md#executionpayloadheader
   ExecutionPayloadHeader* = object
